@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI 시황 브리핑</title>
+  <title>AI 마감시황 브리핑</title>
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
@@ -31,7 +31,6 @@
 </head>
 <body class="text-tossTextDark min-h-screen flex flex-col">
 
-  <!-- 상단 헤더 -->
   <header class="bg-white border-b border-tossBorder sticky top-0 z-40">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
       <div class="flex items-center space-x-3">
@@ -49,11 +48,9 @@
     </div>
   </header>
 
-  <!-- 메인 레이아웃 -->
   <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
       
-      <!-- 좌측: 설정 및 검색 패널 -->
       <section class="lg:col-span-4 space-y-6">
         <div class="bg-white rounded-3xl border border-tossBorder p-6 sm:p-7 shadow-sm">
           <div class="mb-6">
@@ -88,7 +85,7 @@
 
           <button onclick="generateMarketReport()" class="w-full py-4 px-4 bg-tossBlue hover:bg-tossBlueHover text-white font-bold rounded-2xl shadow-md flex items-center justify-center space-x-2.5 transition-all active:scale-[0.98]">
             <i data-lucide="sparkles" class="w-5 h-5"></i>
-            <span>AI 시황 분석하기</span>
+            <span>AI 마감시황 분석하기</span>
           </button>
         </div>
 
@@ -100,16 +97,14 @@
           <div class="flex flex-col gap-3">
             <input type="text" id="custom-stock-input" placeholder="종목명 또는 티커 (예: 삼성전자, MSFT)" class="w-full px-5 py-3.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-1 focus:ring-tossBlue text-sm">
             <button onclick="searchCustomStock()" class="w-full px-7 py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold flex items-center justify-center space-x-1.5 active:scale-[0.98]">
-              <i data-lucide="bar-chart" class="w-4 h-4"></i><span>종목 분석</span>
+              <i data-lucide="bar-chart" class="w-4 h-4"></i><span>종목 AI 분석</span>
             </button>
           </div>
         </div>
       </section>
 
-      <!-- 우측: 결과 화면 영역 -->
       <section class="lg:col-span-8">
         
-        <!-- 초기 안내 화면 -->
         <div id="state-initial" class="bg-white rounded-3xl border border-tossBorder p-12 text-center shadow-sm flex flex-col items-center justify-center min-h-[550px] h-full">
           <div class="w-20 h-20 rounded-full bg-blue-50 text-tossBlue flex items-center justify-center mb-6">
             <i data-lucide="bar-chart-2" class="w-10 h-10"></i>
@@ -120,7 +115,6 @@
           </p>
         </div>
 
-        <!-- 로딩 화면 -->
         <div id="state-loading" class="hidden bg-white rounded-3xl border border-tossBorder p-8 shadow-sm space-y-8 min-h-[550px]">
           <div class="animate-pulse space-y-6">
             <div class="h-6 w-1/3 bg-slate-200 rounded"></div>
@@ -138,7 +132,6 @@
           </div>
         </div>
 
-        <!-- 분석 결과 화면 -->
         <div id="state-report" class="hidden space-y-4">
           <div class="flex justify-end space-x-2">
             <button onclick="copyReportToClipboard()" class="flex items-center space-x-1.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-semibold shadow-sm">
@@ -260,7 +253,7 @@
       <div class="p-7 overflow-y-auto scrollbar-hide">
         <div id="modal-loading" class="flex flex-col items-center justify-center py-12 space-y-5">
           <div class="w-10 h-10 rounded-full border-4 border-tossBlue border-t-transparent animate-spin"></div>
-          <p class="text-sm font-bold text-slate-500 text-center leading-relaxed">최신 실적 발표와<br/>기업 정보를 요약 중입니다...</p>
+          <p class="text-sm font-bold text-slate-500 text-center leading-relaxed">AI가 최신 실적 발표와<br/>기업 정보를 요약 중입니다...</p>
         </div>
         <div id="modal-data" class="hidden space-y-7">
           <div class="bg-slate-50 rounded-2xl p-6 border border-slate-100 flex items-center justify-between">
@@ -361,7 +354,6 @@
 
     // Vercel 환경 통신
     async function callGeminiAPI(endpointType, payloadData) {
-      // Vercel의 서버리스 함수 주소
       const endpoint = '/api/gemini'; 
       const res = await fetch(endpoint, { 
         method: 'POST', 
@@ -437,6 +429,7 @@
       badge.innerText = market === 'US' ? '미국' : (market === 'JP' ? '일본' : '한국');
       badge.className = `text-xs font-bold px-3 py-1 rounded-md ${market==='US'?'bg-emerald-50 text-emerald-600':'bg-rose-50 text-rose-600'}`;
 
+      // 환율 명칭 적용
       document.getElementById('label-exchange').innerText = market === 'JP' ? '달러/엔 환율' : '달러 환율';
 
       document.getElementById('rendered-sectors').innerHTML = (data.sectors || []).map(s => 
@@ -581,7 +574,6 @@
       });
     }
 
-    // 마크다운 복사 로직 복구
     function getReportAsMarkdown() {
       const data = state.reportData;
       if (!data) return '';
@@ -590,30 +582,43 @@
       md += `* **요약**: ${data.summary}\n\n---\n\n`;
       
       md += `#### 1. 주요 시장 지수\n`;
-      data.indices.forEach(item => { md += `- ${item.name}: ${item.value} (${item.change})\n`; });
+      data.indices.forEach(item => {
+        md += `- ${item.name}: ${item.value} (${item.change})\n`;
+      });
       md += `\n---\n\n`;
       
       md += `#### 2. 주요 거시 지표\n`;
       md += `- 환율: ${data.macro.exchangeRate.value} (${data.macro.exchangeRate.change})\n`;
       md += `- 달러 인덱스: ${data.macro.dollarIndex.value} (${data.macro.dollarIndex.change})\n`;
-      data.macro.commodities.forEach(item => { md += `- ${item.name}: ${item.value} (${item.change})\n`; });
+      data.macro.commodities.forEach(item => {
+        md += `- ${item.name}: ${item.value} (${item.change})\n`;
+      });
       md += `\n---\n\n`;
       
       if (data.sectors && data.sectors.length > 0) {
-        md += `#### 3. 오늘의 주도 섹터\n- ${data.sectors.join(', ')}\n\n---\n\n`;
+        md += `#### 3. 오늘의 주도 섹터\n`;
+        md += `- ${data.sectors.join(', ')}\n\n`;
+        md += `---\n\n`;
       }
       
       md += `#### 4. 주요 특징주\n`;
-      data.stocks.forEach(stock => { md += `- **${stock.name} (${stock.ticker})** [${stock.change}]\n  : ${stock.reason}\n`; });
+      data.stocks.forEach(stock => {
+        md += `- **${stock.name} (${stock.ticker})** [${stock.change}]\n  : ${stock.reason}\n`;
+      });
       md += `\n---\n\n`;
       
-      md += `#### 5. 종합 분석 및 전망\n${data.analysis}\n`;
+      md += `#### 5. 종합 분석 및 전망\n`;
+      md += `${data.analysis}\n`;
+
       return md;
     }
 
     function copyReportToClipboard() {
       const markdownText = getReportAsMarkdown();
-      if (!markdownText) return showToast('복사할 리포트 데이터가 없습니다.', false);
+      if (!markdownText) {
+        showToast('복사할 리포트 데이터가 없습니다.', false);
+        return;
+      }
 
       const tempTextArea = document.createElement('textarea');
       tempTextArea.value = markdownText;
@@ -624,8 +629,11 @@
 
       try {
         const successful = document.execCommand('copy');
-        if (successful) showToast('리포트가 클립보드에 복사되었습니다.');
-        else showToast('복사에 실패했습니다.', false);
+        if (successful) {
+          showToast('마크다운 형식의 리포트가 클립보드에 복사되었습니다.');
+        } else {
+          showToast('복사에 실패했습니다.', false);
+        }
       } catch (err) {
         showToast('클립보드 접근 권한이 제한되었습니다.', false);
       } finally {
@@ -635,3 +643,4 @@
   </script>
 </body>
 </html>
+

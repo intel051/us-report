@@ -1,63 +1,38 @@
+html
 <!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI 시황 브리핑</title>
-  <!-- Pretendard Font -->
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
-  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
-  <!-- html2canvas -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script>
     tailwind.config = {
       theme: {
         extend: {
-          fontFamily: {
-            sans: ['Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
-          },
-          colors: {
-            tossBlue: '#3182f6',
-            tossBlueHover: '#1b64da',
-            tossGrayBg: '#f9fafb',
-            tossTextDark: '#191f28',
-            tossTextGray: '#4e5968',
-            tossBorder: '#f2f4f6'
-          }
+          fontFamily: { sans: ['Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'] },
+          colors: { tossBlue: '#3182f6', tossBlueHover: '#1b64da', tossTextDark: '#191f28', tossTextGray: '#4e5968', tossBorder: '#f2f4f6' }
         }
       }
     }
   </script>
   <style>
-    body {
-      font-family: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-      -webkit-font-smoothing: antialiased;
-      background-color: #f9fafb;
-    }
-    .scrollbar-hide::-webkit-scrollbar {
-      display: none;
-    }
-    .scrollbar-hide {
-      -ms-overflow-style: none;
-      scrollbar-width: none;
-    }
+    body { font-family: Pretendard, sans-serif; background-color: #f9fafb; -webkit-font-smoothing: antialiased; }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
     .modal-enter { opacity: 0; transform: scale(0.95) translateY(10px); }
     .modal-enter-active { opacity: 1; transform: scale(1) translateY(0); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
     .modal-leave { opacity: 1; transform: scale(1) translateY(0); }
     .modal-leave-active { opacity: 0; transform: scale(0.95) translateY(10px); transition: all 0.2s ease-in; }
-    
-    /* Gradient for Sentiment Bar */
-    .sentiment-bg {
-      background: linear-gradient(90deg, #3b82f6 0%, #10b981 50%, #f43f5e 100%);
-    }
+    .sentiment-bg { background: linear-gradient(90deg, #3b82f6 0%, #10b981 50%, #f43f5e 100%); }
   </style>
 </head>
-<body class="text-tossTextDark antialiased min-h-screen flex flex-col">
+<body class="text-tossTextDark min-h-screen flex flex-col">
 
-  <!-- Header -->
+  <!-- 상단 헤더 -->
   <header class="bg-white border-b border-tossBorder sticky top-0 z-40">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
       <div class="flex items-center space-x-3">
@@ -75,11 +50,11 @@
     </div>
   </header>
 
-  <!-- Main Container -->
+  <!-- 메인 레이아웃 -->
   <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
       
-      <!-- Left Panel: Controls -->
+      <!-- 좌측: 설정 및 검색 패널 -->
       <section class="lg:col-span-4 space-y-6">
         <div class="bg-white rounded-3xl border border-tossBorder p-6 sm:p-7 shadow-sm">
           <div class="mb-6">
@@ -87,46 +62,56 @@
             <p class="text-xs text-tossTextGray mt-1.5">시장과 일자를 선택하여 시황을 분석합니다.</p>
           </div>
 
-          <!-- Market Tabs -->
           <div class="mb-7">
             <label class="block text-xs font-semibold text-tossTextGray mb-3">시장 선택</label>
             <div class="bg-slate-100 p-1.5 rounded-2xl flex space-x-1">
-              <button id="tab-KR" onclick="changeMarket('KR')" class="market-tab flex-1 py-3 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center justify-center space-x-1.5 bg-white text-slate-800 shadow-sm border border-slate-100">
+              <button id="tab-KR" onclick="changeMarket('KR')" class="market-tab flex-1 py-3 rounded-xl text-sm font-semibold transition-all bg-white text-slate-800 shadow-sm border border-slate-100 flex items-center justify-center space-x-1.5">
                 <span class="w-2 h-2 rounded-full bg-rose-500"></span><span>한국</span>
               </button>
-              <button id="tab-US" onclick="changeMarket('US')" class="market-tab flex-1 py-3 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center justify-center space-x-1.5 text-slate-500 hover:text-slate-800">
+              <button id="tab-US" onclick="changeMarket('US')" class="market-tab flex-1 py-3 rounded-xl text-sm font-semibold transition-all text-slate-500 hover:text-slate-800 flex items-center justify-center space-x-1.5">
                 <span class="w-2 h-2 rounded-full bg-emerald-500"></span><span>미국</span>
               </button>
-              <button id="tab-JP" onclick="changeMarket('JP')" class="market-tab flex-1 py-3 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center justify-center space-x-1.5 text-slate-500 hover:text-slate-800">
+              <button id="tab-JP" onclick="changeMarket('JP')" class="market-tab flex-1 py-3 rounded-xl text-sm font-semibold transition-all text-slate-500 hover:text-slate-800 flex items-center justify-center space-x-1.5">
                 <span class="w-2 h-2 rounded-full bg-rose-500"></span><span>일본</span>
               </button>
             </div>
           </div>
 
-          <!-- Date Selector -->
           <div class="mb-8">
             <label class="block text-xs font-semibold text-tossTextGray mb-3" for="date-picker">날짜 선택</label>
             <div class="relative">
               <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                 <i data-lucide="calendar" class="h-5 w-5 text-slate-400"></i>
               </div>
-              <input type="date" id="date-picker" class="block w-full pl-11 pr-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-tossBlue transition-all"/>
+              <input type="date" id="date-picker" class="block w-full pl-11 pr-4 py-3.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-tossBlue"/>
             </div>
           </div>
 
-          <!-- Generate Button -->
-          <button onclick="generateMarketReport()" class="w-full py-4 px-4 bg-tossBlue hover:bg-tossBlueHover text-white font-bold rounded-2xl shadow-md shadow-blue-100 flex items-center justify-center space-x-2.5 transition-all duration-200 active:scale-[0.98]">
+          <button onclick="generateMarketReport()" class="w-full py-4 px-4 bg-tossBlue hover:bg-tossBlueHover text-white font-bold rounded-2xl shadow-md flex items-center justify-center space-x-2.5 transition-all active:scale-[0.98]">
             <i data-lucide="sparkles" class="w-5 h-5"></i>
-            <span>AI 마감시황 분석하기</span>
+            <span>AI 시황 분석하기</span>
           </button>
+        </div>
+
+        <div class="bg-slate-100/70 border border-slate-200 rounded-3xl p-6 sm:p-7 shadow-sm">
+          <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center space-x-1.5">
+            <i data-lucide="search" class="w-4 h-4 text-tossBlue"></i>
+            <span>궁금한 종목 직접 분석하기</span>
+          </h3>
+          <div class="flex flex-col gap-3">
+            <input type="text" id="custom-stock-input" placeholder="종목명 또는 티커 (예: 삼성전자, MSFT)" class="w-full px-5 py-3.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-1 focus:ring-tossBlue text-sm">
+            <button onclick="searchCustomStock()" class="w-full px-7 py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold flex items-center justify-center space-x-1.5 active:scale-[0.98]">
+              <i data-lucide="bar-chart" class="w-4 h-4"></i><span>종목 분석</span>
+            </button>
+          </div>
         </div>
       </section>
 
-      <!-- Right Panel: Report Render Area -->
+      <!-- 우측: 결과 화면 영역 -->
       <section class="lg:col-span-8">
         
-        <!-- Welcome State -->
-        <div id="state-initial" class="bg-white rounded-3xl border border-tossBorder p-12 text-center shadow-sm flex flex-col items-center justify-center min-h-[550px]">
+        <!-- 초기 안내 화면 -->
+        <div id="state-initial" class="bg-white rounded-3xl border border-tossBorder p-12 text-center shadow-sm flex flex-col items-center justify-center min-h-[550px] h-full">
           <div class="w-20 h-20 rounded-full bg-blue-50 text-tossBlue flex items-center justify-center mb-6">
             <i data-lucide="bar-chart-2" class="w-10 h-10"></i>
           </div>
@@ -136,7 +121,7 @@
           </p>
         </div>
 
-        <!-- Loading State -->
+        <!-- 로딩 화면 -->
         <div id="state-loading" class="hidden bg-white rounded-3xl border border-tossBorder p-8 shadow-sm space-y-8 min-h-[550px]">
           <div class="animate-pulse space-y-6">
             <div class="h-6 w-1/3 bg-slate-200 rounded"></div>
@@ -150,24 +135,22 @@
           </div>
           <div class="bg-blue-50 border border-blue-100 rounded-2xl p-5 flex items-center space-x-4">
             <div class="w-5 h-5 rounded-full border-2 border-tossBlue border-t-transparent animate-spin"></div>
-            <div class="text-sm font-semibold text-slate-800" id="loading-step-text">글로벌 금융 시장 데이터 검색 중...</div>
+            <div class="text-sm font-semibold text-slate-800">글로벌 금융 시장 데이터 검색 중...</div>
           </div>
         </div>
 
-        <!-- Report State -->
+        <!-- 분석 결과 화면 -->
         <div id="state-report" class="hidden space-y-4">
-          
           <div class="flex justify-end space-x-2">
-            <button onclick="copyReportToClipboard()" class="flex items-center space-x-1.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm">
+            <button onclick="copyReportToClipboard()" class="flex items-center space-x-1.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-semibold shadow-sm">
               <i data-lucide="copy" class="w-4 h-4"></i><span>리포트 복사</span>
             </button>
-            <button onclick="exportReportAsImage()" class="flex items-center space-x-1.5 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm">
+            <button onclick="exportReportAsImage()" class="flex items-center space-x-1.5 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl text-sm font-semibold shadow-sm">
               <i data-lucide="download" class="w-4 h-4"></i><span>이미지로 저장</span>
             </button>
           </div>
 
           <div id="report-canvas-area" class="bg-white rounded-3xl border border-tossBorder p-6 sm:p-10 shadow-sm space-y-10">
-            <!-- Report Header -->
             <div class="flex flex-col md:flex-row md:items-center justify-between pb-6 border-b border-tossBorder gap-4">
               <div>
                 <div class="flex items-center space-x-2 mb-2.5">
@@ -176,15 +159,13 @@
                 </div>
                 <h2 id="rendered-title" class="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight"></h2>
               </div>
-              
-              <!-- Core Sectors -->
               <div class="flex flex-col md:items-end space-y-2">
                 <span class="text-xs font-bold text-slate-400">오늘의 주도 섹터</span>
                 <div id="rendered-sectors" class="flex gap-1.5 flex-wrap md:justify-end"></div>
               </div>
             </div>
 
-            <!-- Market Sentiment Bar -->
+            <!-- 심리 온도계 -->
             <div class="bg-slate-50 rounded-2xl p-6 border border-slate-100">
               <div class="flex justify-between items-end mb-4">
                 <div class="flex items-center space-x-2">
@@ -197,25 +178,20 @@
                 <div id="rendered-sentiment-pointer" class="absolute top-0 bottom-0 w-1.5 bg-white shadow-[0_0_5px_rgba(0,0,0,0.6)] transition-all duration-1000 rounded-full" style="left: 50%;"></div>
               </div>
               <div class="flex justify-between mt-2.5 text-xs font-bold text-slate-400">
-                <span>극단적 공포 (0)</span>
-                <span>중립 (50)</span>
-                <span>극단적 탐욕 (100)</span>
+                <span>극단적 공포 (0)</span><span>중립 (50)</span><span>극단적 탐욕 (100)</span>
               </div>
             </div>
 
-            <!-- Summary -->
             <div class="bg-blue-50/60 rounded-2xl p-6 border border-blue-100 flex items-start space-x-4">
               <div class="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center flex-shrink-0 shadow-sm"><i data-lucide="message-square" class="w-5 h-5"></i></div>
               <p id="rendered-summary" class="text-sm sm:text-base font-medium text-slate-800 leading-relaxed pt-0.5 break-keep"></p>
             </div>
 
-            <!-- Indices -->
             <div>
               <h3 class="text-sm font-bold text-slate-500 mb-5 flex items-center space-x-1.5"><i data-lucide="activity" class="w-4 h-4"></i><span>주요 시장 지수 마감현황</span></h3>
               <div id="rendered-indices-container" class="grid grid-cols-1 sm:grid-cols-3 gap-5"></div>
             </div>
 
-            <!-- Macro -->
             <div>
               <h3 class="text-sm font-bold text-slate-500 mb-5 flex items-center space-x-1.5"><i data-lucide="globe" class="w-4 h-4"></i><span>환율 및 주요 원자재 지표</span></h3>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -246,30 +222,16 @@
               </div>
             </div>
 
-            <!-- News (Optimized for PC Grid) -->
             <div>
               <h3 class="text-sm font-bold text-slate-500 mb-5 flex items-center space-x-1.5"><i data-lucide="newspaper" class="w-4 h-4 text-tossBlue"></i><span>주요 마켓 뉴스</span></h3>
               <div id="rendered-news-container" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
             </div>
 
-            <!-- Stocks (Optimized for PC Grid without Logos) -->
             <div>
               <h3 class="text-sm font-bold text-slate-500 mb-5 flex items-center space-x-1.5"><i data-lucide="star" class="w-4 h-4 text-amber-500"></i><span>오늘의 특징주 TOP 3 (클릭 시 실적 요약)</span></h3>
               <div id="rendered-stocks-container" class="grid grid-cols-1 sm:grid-cols-3 gap-5"></div>
             </div>
-            
-            <!-- Custom Stock Search (Fixed layout for Mobile) -->
-            <div class="bg-slate-100/70 border border-slate-200 rounded-2xl p-6">
-              <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center space-x-1.5"><i data-lucide="search" class="w-4 h-4 text-tossBlue"></i><span>궁금한 종목 직접 분석하기</span></h3>
-              <div class="flex flex-col sm:flex-row gap-3">
-                <input type="text" id="custom-stock-input" placeholder="종목명 또는 티커 (예: 삼성전자, MSFT)" class="w-full px-5 py-3.5 rounded-xl border border-slate-300 focus:outline-none focus:border-tossBlue focus:ring-1 focus:ring-tossBlue text-sm transition-all shadow-sm">
-                <button onclick="searchCustomStock()" class="w-full sm:w-auto px-7 py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold transition-all whitespace-nowrap shrink-0 shadow-sm flex items-center justify-center space-x-1.5">
-                  <i data-lucide="bar-chart" class="w-4 h-4"></i><span>AI 분석</span>
-                </button>
-              </div>
-            </div>
 
-            <!-- Analysis -->
             <div class="border-t border-tossBorder pt-8">
               <h3 class="text-sm font-bold text-slate-500 mb-5 flex items-center space-x-1.5"><i data-lucide="file-text" class="w-4 h-4"></i><span>종합 분석 및 전망</span></h3>
               <div class="bg-white rounded-2xl p-7 border border-slate-200 shadow-sm leading-loose text-slate-800 text-sm sm:text-base space-y-4 break-keep">
@@ -277,23 +239,16 @@
               </div>
             </div>
             
-            <!-- Sources -->
-            <div id="rendered-sources-area" class="hidden border-t border-tossBorder pt-6">
-              <span class="text-xs font-bold text-tossTextGray block mb-3">검색 출처</span>
-              <div id="rendered-sources-container" class="flex flex-wrap gap-2"></div>
-            </div>
           </div>
         </div>
-
       </section>
     </div>
   </main>
 
-  <!-- Stock Detail Modal (Logo Removed) -->
+  <!-- 팝업 모달창 -->
   <div id="stock-modal" class="fixed inset-0 z-50 flex items-center justify-center hidden">
     <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity" onclick="closeStockModal()"></div>
     <div id="stock-modal-content" class="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden modal-enter flex flex-col max-h-[85vh]">
-      
       <div class="px-7 py-6 border-b border-tossBorder flex items-center justify-between bg-white sticky top-0 z-10">
         <div>
           <h3 id="modal-stock-name" class="text-xl font-bold text-slate-900 leading-tight"></h3>
@@ -303,13 +258,11 @@
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
-
       <div class="p-7 overflow-y-auto scrollbar-hide">
         <div id="modal-loading" class="flex flex-col items-center justify-center py-12 space-y-5">
           <div class="w-10 h-10 rounded-full border-4 border-tossBlue border-t-transparent animate-spin"></div>
-          <p class="text-sm font-bold text-slate-500 text-center leading-relaxed">AI가 최신 실적 발표와<br/>기업 정보를 실시간으로 요약 중입니다...</p>
+          <p class="text-sm font-bold text-slate-500 text-center leading-relaxed">최신 실적 발표와<br/>기업 정보를 요약 중입니다...</p>
         </div>
-
         <div id="modal-data" class="hidden space-y-7">
           <div class="bg-slate-50 rounded-2xl p-6 border border-slate-100 flex items-center justify-between">
             <div>
@@ -331,7 +284,7 @@
     </div>
   </div>
 
-  <!-- Toast -->
+  <!-- 토스트 알림 -->
   <div id="toast" class="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-slate-900 text-white text-sm font-semibold px-6 py-3.5 rounded-full shadow-2xl flex items-center space-x-2.5 opacity-0 pointer-events-none transition-all duration-300 z-[60]">
     <i data-lucide="check" class="w-4.5 h-4.5 text-emerald-400" id="toast-icon"></i>
     <span id="toast-message"></span>
@@ -343,13 +296,11 @@
       selectedDate: '',
       isLoading: false,
       reportData: null,
-      sources: []
     };
 
     window.onload = function() {
       const today = new Date();
-      // KST 기준으로 오늘 날짜 세팅하기 위한 보정
-      const offset = 9 * 60 * 60 * 1000;
+      const offset = 9 * 60 * 60 * 1000; 
       const kstToday = new Date(today.getTime() + offset);
       const dateStr = kstToday.toISOString().split('T')[0];
       
@@ -382,18 +333,16 @@
       state.activeMarket = market;
       
       document.querySelectorAll('.market-tab').forEach(el => {
-        el.className = 'market-tab flex-1 py-3 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center justify-center space-x-1.5 text-slate-500 hover:text-slate-800';
+        el.className = 'market-tab flex-1 py-3 rounded-xl text-sm font-semibold transition-all flex items-center justify-center space-x-1.5 text-slate-500 hover:text-slate-800';
       });
-      document.getElementById(`tab-${market}`).className = 'market-tab flex-1 py-3 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center justify-center space-x-1.5 bg-white text-slate-800 shadow-sm border border-slate-100';
+      document.getElementById(`tab-${market}`).className = 'market-tab flex-1 py-3 rounded-xl text-sm font-semibold transition-all flex items-center justify-center space-x-1.5 bg-white text-slate-800 shadow-sm border border-slate-100';
     }
 
     function isMarketClosed(dateStr, market) {
       const selected = new Date(dateStr);
       const day = selected.getDay();
       
-      if (day === 0 || day === 6) {
-        return { valid: false, reason: '선택하신 날짜는 주말(휴장일)입니다.' };
-      }
+      if (day === 0 || day === 6) return { valid: false, reason: '선택하신 날짜는 주말(휴장일)입니다.' };
 
       const now = new Date();
       let closeTime;
@@ -407,77 +356,32 @@
         closeTime.setDate(closeTime.getDate() + 1);
       }
 
-      if (now < closeTime) {
-        return { valid: false, reason: '아직 장이 마감되지 않았거나 열리지 않은 날짜입니다.' };
-      }
-
+      if (now < closeTime) return { valid: false, reason: '아직 장이 마감되지 않았거나 열리지 않은 날짜입니다.' };
       return { valid: true };
     }
 
-    // --- Vercel API 통신 모듈로 완전히 교체된 부분 ---
-    async function callGeminiAPI(market, date) {
-      // Vercel 환경에서 동작할 백엔드 API 주소 (상대경로)
-      const endpoint = '/api/gemini';
-      
-      let marketText = market === 'US' ? '미국 뉴욕 증시(S&P500, 나스닥)' : (market === 'JP' ? '일본 증시(닛케이, 토픽스)' : '한국 증시(코스피, 코스닥)');
-      let exchangeTarget = market === 'JP' ? '달러/엔(USD/JPY) 환율' : '원/달러 환율';
-
-      const payload = {
-        contents: [{ parts: [{ text: `주제: ${marketText} ${date} 마감 시황 리포트 작성. 반드시 google_search를 활용해 정확한 수치를 JSON 포맷에 맞게 작성할 것.
-        요구사항:
-        1. 거시 지표 환율은 반드시 해당 시장에 맞는 '${exchangeTarget}' 데이터를 추출해라.
-        2. 시장 참여자들의 전반적인 투자 심리 점수를 0~100 사이(100이 극단적 탐욕)로 평가하고 상태 라벨(예: 공포, 중립, 탐욕 등)을 작성하라.
-        3. 당일 시장을 주도한 핵심 테마 혹은 섹터 3가지를 도출하라.` }] }],
-        systemInstruction: { parts: [{ text: '당신은 토스증권 스타일의 간결한 문체를 사용하는 애널리스트입니다.' }] },
-        tools: [{ 'google_search': {} }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'OBJECT',
-            properties: {
-              marketName: { type: 'STRING' }, date: { type: 'STRING' }, summary: { type: 'STRING' },
-              sentiment: { type: 'OBJECT', properties: { score: { type: 'NUMBER' }, label: { type: 'STRING' } }, required: ['score', 'label'] },
-              sectors: { type: 'ARRAY', items: { type: 'STRING' } },
-              indices: { type: 'ARRAY', items: { type: 'OBJECT', properties: { name: { type: 'STRING' }, value: { type: 'STRING' }, change: { type: 'STRING' }, status: { type: 'STRING', enum: ['up', 'down', 'steady'] } } } },
-              macro: { type: 'OBJECT', properties: {
-                exchangeRate: { type: 'OBJECT', properties: { value: { type: 'STRING' }, change: { type: 'STRING' }, status: { type: 'STRING', enum: ['up', 'down', 'steady'] } } },
-                dollarIndex: { type: 'OBJECT', properties: { value: { type: 'STRING' }, change: { type: 'STRING' }, status: { type: 'STRING', enum: ['up', 'down', 'steady'] } } },
-                commodities: { type: 'ARRAY', items: { type: 'OBJECT', properties: { name: { type: 'STRING' }, value: { type: 'STRING' }, change: { type: 'STRING' }, status: { type: 'STRING', enum: ['up', 'down', 'steady'] } } } }
-              } },
-              news: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: { type: 'STRING' }, source: { type: 'STRING' } } } },
-              stocks: { type: 'ARRAY', items: { type: 'OBJECT', properties: { name: { type: 'STRING' }, ticker: { type: 'STRING' }, change: { type: 'STRING' }, status: { type: 'STRING', enum: ['up', 'down', 'steady'] }, reason: { type: 'STRING' } } } },
-              analysis: { type: 'STRING' }
-            }
-          }
-        }
-      };
-
+    // Vercel 환경 통신
+    async function callGeminiAPI(endpointType, payloadData) {
+      // Vercel의 서버리스 함수 주소
+      const endpoint = '/api/gemini'; 
       const res = await fetch(endpoint, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ payload: payload }) 
+        body: JSON.stringify({ type: endpointType, payload: payloadData }) 
       });
       
       if(!res.ok) throw new Error('API 연동 에러');
-      
-      const data = await res.json();
-      return data;
+      return await res.json();
     }
 
     async function generateMarketReport() {
       const date = document.getElementById('date-picker').value;
       const market = state.activeMarket;
 
-      if (!date) {
-        showToast('날짜를 선택해 주세요.', false);
-        return;
-      }
-
+      if (!date) return showToast('날짜를 선택해 주세요.', false);
+      
       const validation = isMarketClosed(date, market);
-      if (!validation.valid) {
-        showToast(validation.reason, false);
-        return;
-      }
+      if (!validation.valid) return showToast(validation.reason, false);
 
       state.selectedDate = date;
       state.isLoading = true;
@@ -486,24 +390,27 @@
       document.getElementById('state-loading').classList.remove('hidden');
 
       try {
-        const responseData = await callGeminiAPI(market, date);
+        let marketText = market === 'US' ? '미국 뉴욕 증시' : (market === 'JP' ? '일본 증시' : '한국 증시');
+        let exchangeTarget = market === 'JP' ? '달러/엔 환율' : '달러 환율';
+
+        const reqData = {
+          marketText: marketText,
+          date: date,
+          exchangeTarget: exchangeTarget
+        };
+
+        const responseData = await callGeminiAPI('report', reqData);
+        state.reportData = responseData;
         
-        let jsonText = responseData.candidates[0].content.parts[0].text.trim();
-        if (jsonText.startsWith('```')) jsonText = jsonText.replace(/^```(json)?|```$/g, '').trim();
-        
-        state.reportData = JSON.parse(jsonText);
         renderReport();
-        
         document.getElementById('state-loading').classList.add('hidden');
         document.getElementById('state-report').classList.remove('hidden');
         showToast('마감시황 분석 완료');
 
       } catch (err) {
-        state.reportData = getFallbackData(market, date);
-        renderReport();
         document.getElementById('state-loading').classList.add('hidden');
-        document.getElementById('state-report').classList.remove('hidden');
-        showToast('서버 접속 불가로 임시 샘플 데이터를 로드했습니다.', false);
+        document.getElementById('state-initial').classList.remove('hidden');
+        showToast('서버 접속에 실패했습니다. Vercel 배포를 확인해주세요.', false);
       } finally {
         state.isLoading = false;
       }
@@ -518,6 +425,8 @@
 
     function renderReport() {
       const data = state.reportData;
+      if (!data) return;
+      
       const market = state.activeMarket;
       
       document.getElementById('rendered-date').innerText = `${data.date} 기준`;
@@ -529,7 +438,7 @@
       badge.innerText = market === 'US' ? '미국' : (market === 'JP' ? '일본' : '한국');
       badge.className = `text-xs font-bold px-3 py-1 rounded-md ${market==='US'?'bg-emerald-50 text-emerald-600':'bg-rose-50 text-rose-600'}`;
 
-      document.getElementById('label-exchange').innerText = market === 'JP' ? '엔/달러 환율' : '원/달러 환율';
+      document.getElementById('label-exchange').innerText = market === 'JP' ? '달러/엔 환율' : '달러 환율';
 
       document.getElementById('rendered-sectors').innerHTML = (data.sectors || []).map(s => 
         `<span class="bg-blue-50 text-tossBlue px-2.5 py-1 rounded-md text-[11px] font-bold border border-blue-100">${s}</span>`
@@ -539,8 +448,7 @@
       document.getElementById('rendered-sentiment-label').innerText = `${data.sentiment?.label || '중립'} (${score})`;
       document.getElementById('rendered-sentiment-pointer').style.left = `${score}%`;
 
-      const idxCont = document.getElementById('rendered-indices-container');
-      idxCont.innerHTML = data.indices.map(item => {
+      document.getElementById('rendered-indices-container').innerHTML = data.indices.map(item => {
         const st = getStyles(item.status, market);
         const change = item.change.replace(/^\+/, '');
         return `
@@ -603,10 +511,7 @@
 
     function searchCustomStock() {
       const input = document.getElementById('custom-stock-input').value.trim();
-      if (!input) {
-        showToast('검색할 종목명이나 티커를 입력해주세요.', false);
-        return;
-      }
+      if (!input) return showToast('검색할 종목명이나 티커를 입력해주세요.', false);
       openStockModal(input, '검색종목', state.activeMarket);
     }
 
@@ -621,7 +526,6 @@
       }, 200);
     }
 
-    // --- Vercel API 통신 모듈 (모달 종목 분석용) ---
     async function openStockModal(name, ticker, market) {
       const modal = document.getElementById('stock-modal');
       const content = document.getElementById('stock-modal-content');
@@ -636,37 +540,8 @@
       requestAnimationFrame(() => content.classList.add('modal-enter-active'));
 
       try {
-        const endpoint = '/api/gemini';
-        
-        const payload = {
-          contents: [{ parts: [{ text: `'${name}' 기업의 최신 기업 소개와 최근 발표된 실적(어닝 리포트)의 핵심 내용 3가지를 구글 검색으로 찾아 요약해줘.` }] }],
-          systemInstruction: { parts: [{ text: '토스증권처럼 쉽고 간결한 문체로 응답하라.' }] },
-          tools: [{ 'google_search': {} }],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            responseSchema: {
-              type: 'OBJECT',
-              properties: {
-                info: { type: 'STRING' },
-                trend: { type: 'STRING', enum: ['up', 'down', 'steady'] },
-                earnings: { type: 'ARRAY', items: { type: 'STRING' } }
-              }
-            }
-          }
-        };
-
-        const res = await fetch(endpoint, { 
-          method: 'POST', 
-          headers: { 'Content-Type': 'application/json' }, 
-          body: JSON.stringify({ payload: payload }) 
-        });
-        
-        if(!res.ok) throw new Error('API Error');
-        
-        const data = await res.json();
-        let jsonText = data.candidates[0].content.parts[0].text.trim();
-        if (jsonText.startsWith('```')) jsonText = jsonText.replace(/^```(json)?|```$/g, '').trim();
-        const detail = JSON.parse(jsonText);
+        const reqData = { name: name };
+        const detail = await callGeminiAPI('stock', reqData);
 
         document.getElementById('modal-company-info').innerText = detail.info;
         
@@ -707,32 +582,56 @@
       });
     }
 
-    function copyReportToClipboard() { showToast('리포트 복사 완료'); }
+    // 마크다운 복사 로직 복구
+    function getReportAsMarkdown() {
+      const data = state.reportData;
+      if (!data) return '';
 
-    function getFallbackData(market, date) {
-      return {
-        marketName: market === 'JP' ? '일본 증시' : '샘플 증시',
-        date: date,
-        summary: '선택하신 날짜의 모의 데이터입니다.',
-        sentiment: { score: 72, label: '탐욕' },
-        sectors: ['반도체', '자동차', '금융'],
-        indices: [
-          { name: market==='JP'?'닛케이 225':'종합지수', value: '38,000.00', change: '+1.5%', status: 'up' },
-          { name: market==='JP'?'TOPIX':'보조지수', value: '2,600.00', change: '-0.5%', status: 'down' }
-        ],
-        macro: {
-          exchangeRate: { value: market==='JP'?'156.40엔':'1,350원', change: '-2.1', status: 'down' },
-          dollarIndex: { value: '104.5', change: '+0.1', status: 'up' },
-          commodities: [{ name: 'WTI 원유', value: '$78', change: '+1%', status: 'up' }]
-        },
-        news: [{ title: '미국 연준 금리 인하 기대감 상승', source: '글로벌 경제 매거진' }, {title: 'AI 반도체 수요 급증에 관련주 수혜', source: '테크 뉴스'}],
-        stocks: [
-          { name: market==='JP'?'Toyota':'Apple', ticker: market==='JP'?'7203':'AAPL', change: '+2.0%', status: 'up', reason: '실적 호조 전망으로 인한 상승 매수세 유입' },
-          { name: 'NVIDIA', ticker: 'NVDA', change: '-1.2%', status: 'down', reason: '단기 급등에 따른 차익 실현 매물 출회' },
-          { name: 'Microsoft', ticker: 'MSFT', change: '+0.8%', status: 'up', reason: '클라우드 사업부문 견고한 성장세 지속 평가' }
-        ],
-        analysis: 'API 오류 또는 타임아웃으로 샘플 데이터를 로드했습니다.'
-      };
+      let md = `### [시황 마감 브리핑] ${data.marketName} (${data.date})\n\n`;
+      md += `* **요약**: ${data.summary}\n\n---\n\n`;
+      
+      md += `#### 1. 주요 시장 지수\n`;
+      data.indices.forEach(item => { md += `- ${item.name}: ${item.value} (${item.change})\n`; });
+      md += `\n---\n\n`;
+      
+      md += `#### 2. 주요 거시 지표\n`;
+      md += `- 환율: ${data.macro.exchangeRate.value} (${data.macro.exchangeRate.change})\n`;
+      md += `- 달러 인덱스: ${data.macro.dollarIndex.value} (${data.macro.dollarIndex.change})\n`;
+      data.macro.commodities.forEach(item => { md += `- ${item.name}: ${item.value} (${item.change})\n`; });
+      md += `\n---\n\n`;
+      
+      if (data.sectors && data.sectors.length > 0) {
+        md += `#### 3. 오늘의 주도 섹터\n- ${data.sectors.join(', ')}\n\n---\n\n`;
+      }
+      
+      md += `#### 4. 주요 특징주\n`;
+      data.stocks.forEach(stock => { md += `- **${stock.name} (${stock.ticker})** [${stock.change}]\n  : ${stock.reason}\n`; });
+      md += `\n---\n\n`;
+      
+      md += `#### 5. 종합 분석 및 전망\n${data.analysis}\n`;
+      return md;
+    }
+
+    function copyReportToClipboard() {
+      const markdownText = getReportAsMarkdown();
+      if (!markdownText) return showToast('복사할 리포트 데이터가 없습니다.', false);
+
+      const tempTextArea = document.createElement('textarea');
+      tempTextArea.value = markdownText;
+      tempTextArea.style.position = 'fixed';
+      tempTextArea.style.left = '-9999px';
+      document.body.appendChild(tempTextArea);
+      tempTextArea.select();
+
+      try {
+        const successful = document.execCommand('copy');
+        if (successful) showToast('리포트가 클립보드에 복사되었습니다.');
+        else showToast('복사에 실패했습니다.', false);
+      } catch (err) {
+        showToast('클립보드 접근 권한이 제한되었습니다.', false);
+      } finally {
+        document.body.removeChild(tempTextArea);
+      }
     }
   </script>
 </body>

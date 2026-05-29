@@ -1,9 +1,8 @@
 export const config = {
-  runtime: 'edge', // Vercel 504 TimeOut 오류 방지 설정
+  runtime: 'edge', 
 };
 
 export default async function handler(req) {
-  // POST 방식만 허용
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'POST 메서드만 지원합니다.' }), {
       status: 405,
@@ -16,7 +15,6 @@ export default async function handler(req) {
     const type = body.type;
     const reqData = body.payload;
     
-    // Vercel 환경 변수에서 구글 API 키 불러오기
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
@@ -26,12 +24,10 @@ export default async function handler(req) {
       });
     }
 
-    // 최신 안정화 모델 사용
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
     let payload = {};
 
-    // 1. 전체 마감 시황 작성 요청일 경우
     if (type === 'report') {
       payload = {
         contents: [{ parts: [{ text: `주제: ${reqData.marketText} ${reqData.date} 마감 시황 리포트 작성. 반드시 google_search를 활용해 정확한 수치를 찾을 것.
@@ -63,8 +59,6 @@ export default async function handler(req) {
         }
       };
     } 
-    
-    // 2. 단일 종목 실적 요약 요청일 경우
     else if (type === 'stock') {
       payload = {
         contents: [{ parts: [{ text: `'${reqData.name}' 기업의 최신 기업 소개와 최근 발표된 실적(어닝 리포트) 핵심 내용 3가지를 구글 검색으로 찾아 요약해줘.` }] }],
@@ -109,4 +103,3 @@ export default async function handler(req) {
     });
   }
 }
-

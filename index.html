@@ -52,6 +52,7 @@
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
       
       <section class="lg:col-span-4 space-y-6">
+        
         <div class="bg-white rounded-3xl border border-tossBorder p-6 sm:p-7 shadow-sm">
           <div class="mb-6">
             <h2 class="text-lg font-bold text-slate-800">조회 조건 설정</h2>
@@ -101,6 +102,7 @@
             </button>
           </div>
         </div>
+
       </section>
 
       <section class="lg:col-span-8">
@@ -157,7 +159,6 @@
               </div>
             </div>
 
-            <!-- 심리 온도계 -->
             <div class="bg-slate-50 rounded-2xl p-6 border border-slate-100">
               <div class="flex justify-between items-end mb-4">
                 <div class="flex items-center space-x-2">
@@ -237,7 +238,6 @@
     </div>
   </main>
 
-  <!-- 팝업 모달창 -->
   <div id="stock-modal" class="fixed inset-0 z-50 flex items-center justify-center hidden">
     <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity" onclick="closeStockModal()"></div>
     <div id="stock-modal-content" class="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden modal-enter flex flex-col max-h-[85vh]">
@@ -276,7 +276,6 @@
     </div>
   </div>
 
-  <!-- 토스트 알림 -->
   <div id="toast" class="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-slate-900 text-white text-sm font-semibold px-6 py-3.5 rounded-full shadow-2xl flex items-center space-x-2.5 opacity-0 pointer-events-none transition-all duration-300 z-[60]">
     <i data-lucide="check" class="w-4.5 h-4.5 text-emerald-400" id="toast-icon"></i>
     <span id="toast-message"></span>
@@ -352,7 +351,7 @@
       return { valid: true };
     }
 
-    // Vercel 환경 통신
+    // Vercel 서버리스 연동 
     async function callGeminiAPI(endpointType, payloadData) {
       const endpoint = '/api/gemini'; 
       const res = await fetch(endpoint, { 
@@ -429,7 +428,6 @@
       badge.innerText = market === 'US' ? '미국' : (market === 'JP' ? '일본' : '한국');
       badge.className = `text-xs font-bold px-3 py-1 rounded-md ${market==='US'?'bg-emerald-50 text-emerald-600':'bg-rose-50 text-rose-600'}`;
 
-      // 환율 명칭 적용
       document.getElementById('label-exchange').innerText = market === 'JP' ? '달러/엔 환율' : '달러 환율';
 
       document.getElementById('rendered-sectors').innerHTML = (data.sectors || []).map(s => 
@@ -565,12 +563,31 @@
     function exportReportAsImage() {
       const el = document.getElementById('report-canvas-area');
       showToast('이미지 렌더링 중...');
-      html2canvas(el, { scale: 2, backgroundColor: '#fff', useCORS: true }).then(canvas => {
+      
+      const targetWidth = 1024;
+
+      html2canvas(el, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        windowWidth: targetWidth,
+        width: targetWidth,
+        onclone: function(clonedDoc) {
+          const clonedEl = clonedDoc.getElementById('report-canvas-area');
+          clonedEl.style.width = targetWidth + 'px';
+          clonedEl.style.maxWidth = 'none';
+          clonedEl.style.margin = '0 auto';
+          clonedEl.style.padding = '40px';
+        }
+      }).then(canvas => {
         const link = document.createElement('a');
         link.download = `Market_Report.png`;
-        link.href = canvas.toDataURL();
+        link.href = canvas.toDataURL('image/png');
         link.click();
         showToast('이미지 저장 완료!');
+      }).catch(err => {
+        console.error(err);
+        showToast('이미지 저장 중 오류가 발생했습니다.', false);
       });
     }
 
@@ -582,43 +599,30 @@
       md += `* **요약**: ${data.summary}\n\n---\n\n`;
       
       md += `#### 1. 주요 시장 지수\n`;
-      data.indices.forEach(item => {
-        md += `- ${item.name}: ${item.value} (${item.change})\n`;
-      });
+      data.indices.forEach(item => { md += `- ${item.name}: ${item.value} (${item.change})\n`; });
       md += `\n---\n\n`;
       
       md += `#### 2. 주요 거시 지표\n`;
       md += `- 환율: ${data.macro.exchangeRate.value} (${data.macro.exchangeRate.change})\n`;
       md += `- 달러 인덱스: ${data.macro.dollarIndex.value} (${data.macro.dollarIndex.change})\n`;
-      data.macro.commodities.forEach(item => {
-        md += `- ${item.name}: ${item.value} (${item.change})\n`;
-      });
+      data.macro.commodities.forEach(item => { md += `- ${item.name}: ${item.value} (${item.change})\n`; });
       md += `\n---\n\n`;
       
       if (data.sectors && data.sectors.length > 0) {
-        md += `#### 3. 오늘의 주도 섹터\n`;
-        md += `- ${data.sectors.join(', ')}\n\n`;
-        md += `---\n\n`;
+        md += `#### 3. 오늘의 주도 섹터\n- ${data.sectors.join(', ')}\n\n---\n\n`;
       }
       
       md += `#### 4. 주요 특징주\n`;
-      data.stocks.forEach(stock => {
-        md += `- **${stock.name} (${stock.ticker})** [${stock.change}]\n  : ${stock.reason}\n`;
-      });
+      data.stocks.forEach(stock => { md += `- **${stock.name} (${stock.ticker})** [${stock.change}]\n  : ${stock.reason}\n`; });
       md += `\n---\n\n`;
       
-      md += `#### 5. 종합 분석 및 전망\n`;
-      md += `${data.analysis}\n`;
-
+      md += `#### 5. 종합 분석 및 전망\n${data.analysis}\n`;
       return md;
     }
 
     function copyReportToClipboard() {
       const markdownText = getReportAsMarkdown();
-      if (!markdownText) {
-        showToast('복사할 리포트 데이터가 없습니다.', false);
-        return;
-      }
+      if (!markdownText) return showToast('복사할 리포트 데이터가 없습니다.', false);
 
       const tempTextArea = document.createElement('textarea');
       tempTextArea.value = markdownText;
@@ -629,11 +633,8 @@
 
       try {
         const successful = document.execCommand('copy');
-        if (successful) {
-          showToast('마크다운 형식의 리포트가 클립보드에 복사되었습니다.');
-        } else {
-          showToast('복사에 실패했습니다.', false);
-        }
+        if (successful) showToast('리포트가 클립보드에 복사되었습니다.');
+        else showToast('복사에 실패했습니다.', false);
       } catch (err) {
         showToast('클립보드 접근 권한이 제한되었습니다.', false);
       } finally {
@@ -643,4 +644,3 @@
   </script>
 </body>
 </html>
-

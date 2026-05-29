@@ -1,0 +1,103 @@
+<!-- ... existing code ... -->
+    function animateLoadingSteps() {
+      const steps = [
+        "글로벌 마켓 거시 지표를 검색하는 중...",
+        "환율 및 원자재 마감 지표 파싱 중...",
+        "해당 일자 미디어 주요 보도 뉴스 취합 중...",
+        "이 시각 특징주 급등락 사유 심층 분석 중...",
+        "가독성 높은 금융 리포트로 포맷 다듬는 중..."
+      ];
+      let stepIndex = 0;
+      const stepTextEl = document.getElementById('loading-step-text');
+      stepTextEl.innerText = steps[0];
+
+      const interval = setInterval(() => {
+        stepIndex++;
+        if (stepIndex < steps.length) {
+          stepTextEl.innerText = steps[stepIndex];
+        } else {
+          clearInterval(interval);
+        }
+      }, 2200);
+
+      return interval;
+    }
+
+    async function callGeminiAPI(market, date) {
+      // Vercel API 엔드포인트 호출로 변경
+      const endpoint = `/api/gemini`;
+
+      const systemPrompt = `당신은 대한민국 최고의 이코노미스트이자 시황 분석 애널리스트 비서입니다. 어려운 용어는 가급적 쉽게 쓰며, 토스(Toss) 금융 서비스처럼 쉽고 명조하고 깔끔한 종결 어미를 사용하세요.`;
+<!-- ... existing code ... -->
+              analysis: { type: "STRING" }
+            },
+            required: ["marketName", "date", "summary", "indices", "macro", "news", "stocks", "analysis"]
+          }
+        }
+      };
+
+      const fetchWithRetry = async (url, options, retries = 5, delay = 1000) => {
+        try {
+          const response = await fetch(url, options);
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return await response.json();
+        } catch (error) {
+          if (retries > 0) {
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return fetchWithRetry(url, options, retries - 1, delay * 2);
+          }
+          throw error;
+        }
+      };
+
+      const options = {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // payload를 감싸서 Vercel API 서버로 전송
+        body: JSON.stringify({ payload: payload })
+      };
+
+      const result = await fetchWithRetry(endpoint, options);
+      return result;
+    }
+
+    // Mock Fallback Data Generator
+<!-- ... existing code ... -->
+    async function openStockModal(name, ticker, market) {
+      const modal = document.getElementById('stock-modal');
+      const content = document.getElementById('stock-modal-content');
+      
+      document.getElementById('modal-stock-name').innerText = name;
+      document.getElementById('modal-stock-ticker').innerText = ticker === '검색종목' ? '' : ticker;
+      document.getElementById('modal-stock-icon').innerHTML = getStockIconHtml(name, ticker === '검색종목' ? name : ticker);
+      
+      document.getElementById('modal-loading').classList.remove('hidden');
+      document.getElementById('modal-data').classList.add('hidden');
+
+      modal.classList.remove('hidden');
+      requestAnimationFrame(() => content.classList.add('modal-enter-active'));
+
+      try {
+        // Vercel API 엔드포인트 호출로 변경
+        const endpoint = `/api/gemini`;
+        
+        const payload = {
+          contents: [{ parts: [{ text: `'${name}' 기업의 최신 기업 소개와 최근 발표된 실적(어닝 리포트)의 핵심 내용 3가지를 구글 검색으로 찾아 요약해줘.` }] }],
+<!-- ... existing code ... -->
+              }
+            }
+          }
+        };
+
+        const res = await fetch(endpoint, { 
+          method: "POST", 
+          headers: { "Content-Type": "application/json" }, 
+          // payload를 감싸서 Vercel API 서버로 전송
+          body: JSON.stringify({ payload: payload }) 
+        });
+        if(!res.ok) throw new Error("API Error");
+        
+        const data = await res.json();
+<!-- ... existing code ... -->

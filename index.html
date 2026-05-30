@@ -19,7 +19,6 @@
     }
   </script>
   <style>
-    /* 단어 끊김 방지 및 폰트 안티앨리어싱 전역 적용 */
     body { font-family: Pretendard, sans-serif; background-color: #f9fafb; -webkit-font-smoothing: antialiased; word-break: keep-all; overflow-wrap: break-word; }
     .scrollbar-hide::-webkit-scrollbar { display: none; }
     .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
@@ -96,7 +95,7 @@
             <span>궁금한 종목 직접 분석하기</span>
           </h3>
           <div class="flex flex-col gap-3">
-            <input type="text" id="custom-stock-input" placeholder="종목명 또는 티커 (예: 삼성전자, MSFT)" class="w-full px-5 py-3.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-1 focus:ring-tossBlue text-sm sm:text-base shadow-sm">
+            <input type="text" id="custom-stock-input" placeholder="종목명 또는 티커" class="w-full px-5 py-3.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-1 focus:ring-tossBlue text-sm sm:text-base shadow-sm">
             <button onclick="searchCustomStock()" class="w-full px-7 py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm sm:text-base font-bold flex items-center justify-center space-x-1.5 active:scale-[0.98] shadow-sm">
               <i data-lucide="bar-chart" class="w-4 h-4"></i><span>종목 AI 분석</span>
             </button>
@@ -253,7 +252,7 @@
       <div class="p-6 sm:p-8 overflow-y-auto scrollbar-hide">
         <div id="modal-loading" class="flex flex-col items-center justify-center py-12 sm:py-16 space-y-5">
           <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-4 border-tossBlue border-t-transparent animate-spin"></div>
-          <p class="text-sm sm:text-base font-bold text-slate-500 text-center leading-relaxed break-keep">AI가 최신 실적 발표와<br/>기업 정보를 요약 중입니다...</p>
+          <p class="text-sm sm:text-base font-bold text-slate-500 text-center leading-relaxed break-keep">AI가 기업 정보를 요약 중입니다...</p>
         </div>
         <div id="modal-data" class="hidden space-y-6 sm:space-y-8">
           <div class="bg-slate-50 rounded-2xl p-5 sm:p-7 border border-slate-100 flex items-center justify-between">
@@ -316,7 +315,7 @@
       setTimeout(() => {
         toast.classList.remove('opacity-100');
         toast.classList.add('opacity-0', 'pointer-events-none');
-      }, 2500);
+      }, 3500);
     }
 
     function changeMarket(market) {
@@ -333,7 +332,7 @@
       const selected = new Date(dateStr);
       const day = selected.getDay();
       
-      if (day === 0 || day === 6) return { valid: false, reason: '선택하신 날짜는 주말(휴장일)입니다.' };
+      if (day === 0 || day === 6) return { valid: false, reason: '선택하신 날짜는 휴장일입니다.' };
 
       const now = new Date();
       let closeTime;
@@ -347,11 +346,10 @@
         closeTime.setDate(closeTime.getDate() + 1);
       }
 
-      if (now < closeTime) return { valid: false, reason: '아직 장이 마감되지 않았거나 열리지 않은 날짜입니다.' };
+      if (now < closeTime) return { valid: false, reason: '아직 장이 마감되지 않았습니다.' };
       return { valid: true };
     }
 
-    // Vercel 서버리스 연동 
     async function callGeminiAPI(endpointType, payloadData) {
       const endpoint = '/api/gemini'; 
       const res = await fetch(endpoint, { 
@@ -360,7 +358,16 @@
         body: JSON.stringify({ type: endpointType, payload: payloadData }) 
       });
       
-      if(!res.ok) throw new Error('API 연동 에러');
+      if(!res.ok) {
+         let errMsg = 'API 연동 에러가 발생했습니다.';
+         try {
+             const errData = await res.json();
+             errMsg = errData.error || errMsg;
+         } catch(e) {
+             errMsg = `서버 응답 오류 (상태 코드: ${res.status})`;
+         }
+         throw new Error(errMsg);
+      }
       return await res.json();
     }
 
@@ -400,7 +407,7 @@
       } catch (err) {
         document.getElementById('state-loading').classList.add('hidden');
         document.getElementById('state-initial').classList.remove('hidden');
-        showToast('서버 접속에 실패했습니다. Vercel 배포를 확인해주세요.', false);
+        showToast(err.message, false); 
       } finally {
         state.isLoading = false;
       }
@@ -501,7 +508,7 @@
 
     function searchCustomStock() {
       const input = document.getElementById('custom-stock-input').value.trim();
-      if (!input) return showToast('검색할 종목명이나 티커를 입력해주세요.', false);
+      if (!input) return showToast('검색할 종목명을 입력해주세요.', false);
       openStockModal(input, '검색종목', state.activeMarket);
     }
 
@@ -556,16 +563,15 @@
         document.getElementById('modal-data').classList.remove('hidden');
 
       } catch (err) {
-        document.getElementById('modal-loading').innerHTML = `<p class="text-sm sm:text-base text-rose-500 font-bold break-keep">데이터를 불러오는 데 실패했습니다.</p>`;
+        document.getElementById('modal-loading').innerHTML = `<p class="text-sm sm:text-base text-rose-500 font-bold break-keep">${err.message}</p>`;
       }
     }
 
-    // 반응형 대응 및 밀림 방지 이미지 캡처
     function exportReportAsImage() {
       const el = document.getElementById('report-canvas-area');
       showToast('이미지 렌더링 중...');
       
-      const targetWidth = 1024; // PC 규격 렌더링 폭
+      const targetWidth = 1024; 
 
       html2canvas(el, {
         scale: 2,
@@ -575,8 +581,6 @@
         windowWidth: targetWidth,
         onclone: function(clonedDoc) {
           const clonedEl = clonedDoc.getElementById('report-canvas-area');
-          
-          // 강제 PC 레이아웃 고정
           clonedDoc.body.style.width = targetWidth + 'px';
           clonedEl.style.width = targetWidth + 'px';
           clonedEl.style.minWidth = targetWidth + 'px';
@@ -626,7 +630,7 @@
     function copyReportToClipboard() {
       const markdownText = getReportAsMarkdown();
       if (!markdownText) {
-        showToast('복사할 리포트 데이터가 없습니다.', false);
+        showToast('복사할 데이터가 없습니다.', false);
         return;
       }
 
@@ -640,12 +644,12 @@
       try {
         const successful = document.execCommand('copy');
         if (successful) {
-          showToast('마크다운 형식의 리포트가 클립보드에 복사되었습니다.');
+          showToast('클립보드에 복사되었습니다.');
         } else {
           showToast('복사에 실패했습니다.', false);
         }
       } catch (err) {
-        showToast('클립보드 접근 권한이 제한되었습니다.', false);
+        showToast('클립보드 접근이 제한되었습니다.', false);
       } finally {
         document.body.removeChild(tempTextArea);
       }

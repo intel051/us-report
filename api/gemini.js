@@ -18,7 +18,7 @@ export default async function handler(req) {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'API 키가 등록되지 않았습니다.' }), {
+      return new Response(JSON.stringify({ error: 'Vercel 환경 변수에 API 키가 설정되지 않았습니다.' }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -59,9 +59,33 @@ export default async function handler(req) {
         }
       };
     } 
-    else if (type === 'stock') {
+    else if (type === 'search_stock') {
       payload = {
-        contents: [{ parts: [{ text: `'${reqData.name}' 기업의 최신 기업 소개와 최근 발표된 실적(어닝 리포트) 핵심 내용 3가지를 구글 검색으로 찾아 요약해줘.` }] }],
+        contents: [{ parts: [{ text: `'${reqData.query}' 검색어와 관련된 전 세계 상장 기업 최대 5개를 찾아줘. 이름이 겹치면 시가총액이 큰 순서대로, 오타가 있다면 올바른 기업을 유추해서 추천해줘.` }] }],
+        systemInstruction: { parts: [{ text: '토스증권처럼 간결하고 명확하게 응답해.' }] },
+        tools: [{ 'google_search': {} }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'ARRAY',
+            items: {
+              type: 'OBJECT',
+              properties: {
+                name: { type: 'STRING', description: '기업 공식 명칭' },
+                ticker: { type: 'STRING', description: '종목 코드' },
+                exchange: { type: 'STRING', description: '소속 거래소 (예: NASDAQ, KOSPI 등)' },
+                reason: { type: 'STRING', description: '이 기업을 추천한 이유 (간결하게)' }
+              },
+              required: ['name', 'ticker', 'exchange', 'reason']
+            }
+          }
+        }
+      };
+    }
+    else if (type === 'stock') {
+      const searchTarget = reqData.ticker ? `${reqData.name} (${reqData.ticker})` : reqData.name;
+      payload = {
+        contents: [{ parts: [{ text: `'${searchTarget}' 기업의 최신 소개와 최근 발표된 실적(어닝 리포트)의 핵심 내용 3가지를 구글 검색으로 찾아 요약해줘.` }] }],
         systemInstruction: { parts: [{ text: '토스증권처럼 쉽고 간결한 문체로 응답하라.' }] },
         tools: [{ 'google_search': {} }],
         generationConfig: {
@@ -86,6 +110,21 @@ export default async function handler(req) {
 
     const aiData = await aiResponse.json();
     
+    if (!aiResponse.ok || aiData.error) {
+      const errorMsg = aiData.error?.message || '구글 API 응답 에러가 발생했습니다.';
+      return new Response(JSON.stringify({ error: `[API 오류] ${errorMsg}` }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (!aiData.candidates || aiData.candidates.length === 0) {
+      return new Response(JSON.stringify({ error: 'AI가 적절한 답변을 생성하지 못했습니다. 다시 시도해 주세요.' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    
     let jsonText = aiData.candidates[0].content.parts[0].text.trim();
     if (jsonText.startsWith('```')) {
       jsonText = jsonText.replace(/^```(json)?|```$/g, '').trim();
@@ -97,7 +136,7 @@ export default async function handler(req) {
     });
 
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: `[서버 내부 오류] ${error.message}` }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

@@ -18,25 +18,25 @@ export default async function handler(req) {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'Vercel 환경 변수에 API 키가 설정되지 않았습니다.' }), {
+      return new Response(JSON.stringify({ error: 'Vercel 환경 변수에 API 키가 없습니다.' }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     let payload = {};
 
     if (type === 'report') {
       payload = {
-        contents: [{ parts: [{ text: `주제: ${reqData.marketText} ${reqData.date} 마감 시황 리포트 작성. 반드시 google_search를 활용해 정확한 수치를 찾을 것.
+        contents: [{ parts: [{ text: `주제: ${reqData.marketText} ${reqData.date} 마감 시황 리포트 작성. 반드시 googleSearch를 활용해 정확한 수치를 찾을 것.
         요구사항:
         1. 거시 지표 환율은 반드시 해당 시장에 맞는 '${reqData.exchangeTarget}' 데이터를 추출해라.
         2. 시장 참여자들의 투자 심리 점수를 0~100 사이(100이 탐욕)로 평가하고 상태 라벨(공포, 중립, 탐욕 등)을 작성해라.
         3. 당일 시장을 주도한 핵심 테마 혹은 섹터 3가지를 도출해라.` }] }],
         systemInstruction: { parts: [{ text: '당신은 토스증권 스타일의 간결한 문체를 사용하는 애널리스트입니다.' }] },
-        tools: [{ 'google_search': {} }],
+        tools: [{ googleSearch: {} }],
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: {
@@ -63,7 +63,7 @@ export default async function handler(req) {
       payload = {
         contents: [{ parts: [{ text: `'${reqData.query}' 검색어와 관련된 전 세계 상장 기업 최대 5개를 찾아줘. 이름이 겹치면 시가총액이 큰 순서대로, 오타가 있다면 올바른 기업을 유추해서 추천해줘.` }] }],
         systemInstruction: { parts: [{ text: '토스증권처럼 간결하고 명확하게 응답해.' }] },
-        tools: [{ 'google_search': {} }],
+        tools: [{ googleSearch: {} }],
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: {
@@ -87,7 +87,7 @@ export default async function handler(req) {
       payload = {
         contents: [{ parts: [{ text: `'${searchTarget}' 기업의 최신 소개와 최근 발표된 실적(어닝 리포트)의 핵심 내용 3가지를 구글 검색으로 찾아 요약해줘.` }] }],
         systemInstruction: { parts: [{ text: '토스증권처럼 쉽고 간결한 문체로 응답하라.' }] },
-        tools: [{ 'google_search': {} }],
+        tools: [{ googleSearch: {} }],
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: {
@@ -111,15 +111,15 @@ export default async function handler(req) {
     const aiData = await aiResponse.json();
     
     if (!aiResponse.ok || aiData.error) {
-      const errorMsg = aiData.error?.message || '구글 API 응답 에러가 발생했습니다.';
+      const errorMsg = aiData.error?.message || '응답 에러가 발생했습니다.';
       return new Response(JSON.stringify({ error: `[API 오류] ${errorMsg}` }), {
-        status: 500,
+        status: 400,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
     if (!aiData.candidates || aiData.candidates.length === 0) {
-      return new Response(JSON.stringify({ error: 'AI가 적절한 답변을 생성하지 못했습니다. 다시 시도해 주세요.' }), {
+      return new Response(JSON.stringify({ error: '데이터를 생성하지 못했습니다. 다시 시도해 주세요.' }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
       });

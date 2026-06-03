@@ -110,4 +110,27 @@ export default async function handler(req) {
     
     let jsonText = aiData.candidates[0].content.parts[0].text.trim();
     if (jsonText.startsWith('```')) {
-      jsonText = jsonText
+      jsonText = jsonText.replace(/^```(json)?|```$/g, '').trim();
+    }
+    
+    try {
+      JSON.parse(jsonText);
+    } catch (e) {
+      return new Response(JSON.stringify({ error: '데이터 구조가 손상되었습니다. 다시 분석 버튼을 눌러주세요.' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    
+    return new Response(jsonText, {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+  } catch (error) {
+    return new Response(JSON.stringify({ error: `[서버 타임아웃/오류] ${error.message}` }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+}

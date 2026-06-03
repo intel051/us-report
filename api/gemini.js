@@ -24,21 +24,21 @@ export default async function handler(req) {
       });
     }
 
-    // 안정적인 2.5 플래시 모델 사용
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
     let payload = {};
 
     if (type === 'report') {
       payload = {
-        contents: [{ parts: [{ text: `주제: ${reqData.marketText} ${reqData.date} 마감 시황 리포트 작성. 반드시 googleSearch를 활용해 최신 데이터를 찾을 것.
+        contents: [{ parts: [{ text: `주제: ${reqData.marketText} ${reqData.date} 시황 리포트. 
+        [중요] 타임아웃 방지를 위해 구글 검색은 1~2회로 제한하고 빠르고 정확하게 팩트만 요약해.
         
-        요구사항:
-        1. 거시 지표 환율은 반드시 해당 시장에 맞는 '${reqData.exchangeTarget}' 데이터를 추출해.
-        2. 투자 심리 점수(0~100)와 상태(공포/중립/탐욕)를 작성해.
-        3. 당일 주도 섹터 3가지를 도출해.
+        필수 데이터:
+        1. 환율: ${reqData.exchangeTarget} 최신 데이터.
+        2. 투자심리: 0~100 점수와 상태(공포/중립/탐욕).
+        3. 당일 주도 섹터 3가지.
 
-        [중요] 응답은 반드시 아래의 JSON 형식으로만 출력해. 마크다운 코드블럭이나 다른 설명은 절대 넣지 마:
+        응답은 아래 JSON 형식만 정확히 지켜서 출력해. 설명이나 마크다운은 절대 금지:
         {
           "marketName": "시장명", "date": "날짜", "summary": "전체 요약",
           "sentiment": { "score": 50, "label": "중립" },
@@ -53,34 +53,34 @@ export default async function handler(req) {
           "stocks": [ { "name": "종목명", "ticker": "티커", "change": "등락", "status": "up|down|steady", "reason": "이유" } ],
           "analysis": "종합 분석"
         }` }] }],
-        systemInstruction: { parts: [{ text: '당신은 토스증권 스타일의 간결한 문체를 사용하는 애널리스트입니다. 무조건 JSON으로만 대답하세요.' }] },
+        systemInstruction: { parts: [{ text: '토스증권 애널리스트처럼 군더더기 없이 사실 위주로 빠르게 답변해. 무조건 JSON으로만 출력해야 해.' }] },
         tools: [{ googleSearch: {} }]
       };
     } 
     else if (type === 'search_stock') {
       payload = {
-        contents: [{ parts: [{ text: `'${reqData.query}' 검색어와 관련된 상장 기업 최대 5개를 googleSearch로 찾아줘.
+        contents: [{ parts: [{ text: `'${reqData.query}' 검색어와 관련된 상장 기업 최대 5개를 찾아줘. 검색을 최소화하고 시가총액이 큰 순서대로 나열해.
         
-        [중요] 응답은 반드시 아래 JSON 배열 형식으로만 출력해:
+        응답은 아래 JSON 배열 형식으로만 출력해:
         [
-          { "name": "기업명", "ticker": "티커", "exchange": "거래소", "reason": "추천 이유" }
+          { "name": "기업명", "ticker": "티커", "exchange": "거래소", "reason": "이유" }
         ]` }] }],
-        systemInstruction: { parts: [{ text: '무조건 JSON으로만 대답하세요.' }] },
+        systemInstruction: { parts: [{ text: '무조건 JSON 배열로만 대답해.' }] },
         tools: [{ googleSearch: {} }]
       };
     }
     else if (type === 'stock') {
       const searchTarget = reqData.ticker ? `${reqData.name} (${reqData.ticker})` : reqData.name;
       payload = {
-        contents: [{ parts: [{ text: `'${searchTarget}' 기업의 최신 소개와 어닝 리포트 핵심 3가지를 구글 검색으로 찾아 요약해줘.
+        contents: [{ parts: [{ text: `'${searchTarget}'의 최신 소개와 어닝 리포트 핵심 3가지를 빠르게 구글 검색 후 요약해.
         
-        [중요] 응답은 반드시 아래 JSON 형식으로만 출력해:
+        응답은 아래 JSON 형식으로만 출력해:
         {
           "info": "기업 소개",
           "trend": "up|down|steady",
           "earnings": ["실적1", "실적2", "실적3"]
         }` }] }],
-        systemInstruction: { parts: [{ text: '토스증권처럼 간결하게, 무조건 JSON으로만 대답하세요.' }] },
+        systemInstruction: { parts: [{ text: '사실 위주로 빠르게 요약하고, 무조건 JSON으로만 대답해.' }] },
         tools: [{ googleSearch: {} }]
       };
     }
@@ -94,45 +94,20 @@ export default async function handler(req) {
     const aiData = await aiResponse.json();
     
     if (!aiResponse.ok || aiData.error) {
-      const errorMsg = aiData.error?.message || '응답 에러가 발생했습니다.';
-      return new Response(JSON.stringify({ error: `[API 오류] ${errorMsg}` }), {
+      const errorMsg = aiData.error?.message || '구글 API 에러';
+      return new Response(JSON.stringify({ error: `[API 통신 오류] ${errorMsg}` }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
     if (!aiData.candidates || aiData.candidates.length === 0) {
-      return new Response(JSON.stringify({ error: '데이터를 생성하지 못했습니다. 다시 시도해 주세요.' }), {
+      return new Response(JSON.stringify({ error: 'AI가 데이터를 생성하지 못했습니다. 잠시 후 시도해 주세요.' }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
       });
     }
     
-    // 마크다운 코드블럭(```json)이 섞여 들어오면 깔끔하게 제거
     let jsonText = aiData.candidates[0].content.parts[0].text.trim();
     if (jsonText.startsWith('```')) {
-      jsonText = jsonText.replace(/^```(json)?|```$/g, '').trim();
-    }
-    
-    // JSON 파싱 검증
-    try {
-      JSON.parse(jsonText);
-    } catch (e) {
-      return new Response(JSON.stringify({ error: 'AI가 잘못된 형태의 데이터를 반환했습니다. 다시 시도해 주세요.' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-    
-    return new Response(jsonText, {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-  } catch (error) {
-    return new Response(JSON.stringify({ error: `[서버 내부 오류] ${error.message}` }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-}
+      jsonText = jsonText

@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -30,9 +29,9 @@
       margin: 0 auto !important;
       background: white !important;
     }
-    .capture-mode .grid-cols-1.sm\\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
-    .capture-mode .grid-cols-1.md\\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-    .capture-mode .grid-cols-1.lg\\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    .capture-mode .grid-cols-1.sm\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+    .capture-mode .grid-cols-1.md\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    .capture-mode .grid-cols-1.lg\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
     
     .capture-mode h2, .capture-mode h3, .capture-mode h4, .capture-mode p, .capture-mode span {
       white-space: pre-wrap !important;
@@ -116,7 +115,7 @@
           </h3>
           
           <div class="flex flex-col gap-3 relative">
-            <input type="text" id="custom-stock-input" placeholder="종목명 또는 티커 (예: 현차, 애플)" oninput="handleStockSearchInput()" autocomplete="off" class="w-full px-5 py-3.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-1 focus:ring-tossBlue text-sm sm:text-base shadow-sm z-10">
+            <input type="text" id="custom-stock-input" placeholder="종목명 또는 티커" oninput="handleStockSearchInput()" autocomplete="off" class="w-full px-5 py-3.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-1 focus:ring-tossBlue text-sm sm:text-base shadow-sm z-10">
             
             <div id="stock-dropdown" class="absolute top-[54px] left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-xl z-50 hidden max-h-60 overflow-y-auto">
             </div>
@@ -560,7 +559,6 @@
       lucide.createIcons();
     }
 
-    // --- 드롭다운 종목 자동완성 로직 ---
     async function handleStockSearchInput() {
       const query = document.getElementById('custom-stock-input').value.trim();
       const dropdown = document.getElementById('stock-dropdown');
@@ -618,7 +616,6 @@
       document.getElementById('stock-dropdown').classList.add('hidden');
       openStockModal(query, '', state.activeMarket);
     }
-    // ---------------------------------
 
     function closeStockModal() {
       const modal = document.getElementById('stock-modal');
@@ -716,7 +713,7 @@
       data.indices.forEach(item => { md += `- ${item.name}: ${item.value} (${formatChangeValue(item.change)})\n`; });
       md += `\n---\n\n`;
       
-      #### 2. 주요 거시 지표\n`;
+      md += `#### 2. 주요 거시 지표\n`;
       md += `- 환율: ${data.macro.exchangeRate.value} (${formatChangeValue(data.macro.exchangeRate.change)})\n`;
       md += `- 달러 인덱스: ${data.macro.dollarIndex.value} (${formatChangeValue(data.macro.dollarIndex.change)})\n`;
       data.macro.commodities.forEach(item => { md += `- ${item.name}: ${item.value} (${formatChangeValue(item.change)})\n`; });

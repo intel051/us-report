@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -20,6 +21,25 @@
   </script>
   <style>
     body { font-family: Pretendard, sans-serif; background-color: #f9fafb; -webkit-font-smoothing: antialiased; word-break: keep-all; overflow-wrap: break-word; }
+    
+    .capture-mode {
+      width: 1024px !important;
+      min-width: 1024px !important;
+      max-width: 1024px !important;
+      padding: 48px !important;
+      margin: 0 auto !important;
+      background: white !important;
+    }
+    .capture-mode .grid-cols-1.sm\\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+    .capture-mode .grid-cols-1.md\\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    .capture-mode .grid-cols-1.lg\\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    
+    .capture-mode h2, .capture-mode h3, .capture-mode h4, .capture-mode p, .capture-mode span {
+      white-space: pre-wrap !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+    }
+
     .scrollbar-hide::-webkit-scrollbar { display: none; }
     .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
     .modal-enter { opacity: 0; transform: scale(0.95) translateY(10px); }
@@ -89,15 +109,20 @@
           </button>
         </div>
 
-        <div class="bg-slate-100/70 border border-slate-200 rounded-3xl p-6 sm:p-7 shadow-sm">
+        <div class="bg-slate-100/70 border border-slate-200 rounded-3xl p-6 sm:p-7 shadow-sm relative">
           <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center space-x-1.5 break-keep">
             <i data-lucide="search" class="w-4 h-4 text-tossBlue"></i>
             <span>궁금한 종목 직접 분석하기</span>
           </h3>
-          <div class="flex flex-col gap-3">
-            <input type="text" id="custom-stock-input" placeholder="종목명 또는 티커" class="w-full px-5 py-3.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-1 focus:ring-tossBlue text-sm sm:text-base shadow-sm">
-            <button onclick="searchCustomStock()" class="w-full px-7 py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm sm:text-base font-bold flex items-center justify-center space-x-1.5 active:scale-[0.98] shadow-sm">
-              <i data-lucide="bar-chart" class="w-4 h-4"></i><span>종목 AI 분석</span>
+          
+          <div class="flex flex-col gap-3 relative">
+            <input type="text" id="custom-stock-input" placeholder="종목명 또는 티커 (예: 현차, 애플)" oninput="handleStockSearchInput()" autocomplete="off" class="w-full px-5 py-3.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-1 focus:ring-tossBlue text-sm sm:text-base shadow-sm z-10">
+            
+            <div id="stock-dropdown" class="absolute top-[54px] left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-xl z-50 hidden max-h-60 overflow-y-auto">
+            </div>
+
+            <button onclick="searchCustomStockManually()" class="w-full px-7 py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm sm:text-base font-bold flex items-center justify-center space-x-1.5 active:scale-[0.98] shadow-sm">
+              <i data-lucide="search" class="w-4 h-4"></i><span>종목 검색</span>
             </button>
           </div>
         </div>
@@ -157,7 +182,6 @@
               </div>
             </div>
 
-            <!-- 심리 온도계 -->
             <div class="bg-slate-50 rounded-2xl p-5 sm:p-7 border border-slate-100">
               <div class="flex justify-between items-end mb-4">
                 <div class="flex items-center space-x-2">
@@ -179,54 +203,68 @@
               <p id="rendered-summary" class="text-sm sm:text-base lg:text-lg font-medium text-slate-800 leading-relaxed sm:leading-loose pt-0.5 sm:pt-1 break-keep"></p>
             </div>
 
-            <div>
-              <h3 class="text-sm sm:text-base font-bold text-slate-500 mb-4 sm:mb-6 flex items-center space-x-1.5 break-keep"><i data-lucide="activity" class="w-4 h-4 sm:w-5 sm:h-5"></i><span>주요 시장 지수 마감현황</span></h3>
-              <div id="rendered-indices-container" class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6"></div>
+            <div class="space-y-6">
+              <h3 class="text-sm sm:text-base font-bold text-slate-500 flex items-center space-x-1.5 break-keep">
+                <i data-lucide="activity" class="w-4 h-4 sm:w-5 sm:h-5"></i><span>주요 시장 지수 마감현황</span>
+              </h3>
+              <hr class="border-t border-dashed border-slate-200">
+              <div id="rendered-indices-container" class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 w-full"></div>
             </div>
 
-            <div>
-              <h3 class="text-sm sm:text-base font-bold text-slate-500 mb-4 sm:mb-6 flex items-center space-x-1.5 break-keep"><i data-lucide="globe" class="w-4 h-4 sm:w-5 sm:h-5"></i><span>환율 및 주요 원자재 지표</span></h3>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                <div class="space-y-4 sm:space-y-6">
-                  <div class="bg-slate-50 rounded-2xl p-5 sm:p-7 border border-slate-100 flex justify-between items-center">
+            <div class="space-y-6">
+              <h3 class="text-sm sm:text-base font-bold text-slate-500 flex items-center space-x-1.5 break-keep">
+                <i data-lucide="globe" class="w-4 h-4 sm:w-5 sm:h-5"></i><span>환율 및 주요 원자재 지표</span>
+              </h3>
+              <hr class="border-t border-dashed border-slate-200">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 w-full">
+                <div class="space-y-4 sm:space-y-6 w-full">
+                  <div class="bg-slate-50 rounded-2xl p-5 sm:p-7 border border-slate-100 flex justify-between items-center w-full">
                     <div>
                       <span id="label-exchange" class="text-xs sm:text-sm font-bold text-tossTextGray">달러 환율</span>
                       <div class="flex items-baseline space-x-2 mt-1.5 sm:mt-2">
-                        <span id="rendered-exchange-rate" class="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900"></span>
+                        <span id="rendered-exchange-rate" class="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 break-words"></span>
                         <span id="rendered-exchange-rate-change" class="text-sm sm:text-base font-semibold"></span>
                       </div>
                     </div>
                   </div>
-                  <div class="bg-slate-50 rounded-2xl p-5 sm:p-7 border border-slate-100 flex justify-between items-center">
+                  <div class="bg-slate-50 rounded-2xl p-5 sm:p-7 border border-slate-100 flex justify-between items-center w-full">
                     <div>
                       <span class="text-xs sm:text-sm font-bold text-tossTextGray">달러 인덱스 (DXY)</span>
                       <div class="flex items-baseline space-x-2 mt-1.5 sm:mt-2">
-                        <span id="rendered-dollar-index" class="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900"></span>
+                        <span id="rendered-dollar-index" class="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 break-words"></span>
                         <span id="rendered-dollar-index-change" class="text-sm sm:text-base font-semibold"></span>
                       </div>
                     </div>
                   </div>
                 </div>
-                <div class="bg-slate-50 rounded-2xl p-5 sm:p-7 border border-slate-100">
+                <div class="bg-slate-50 rounded-2xl p-5 sm:p-7 border border-slate-100 w-full">
                   <span class="text-xs sm:text-sm font-bold text-tossTextGray block mb-4 sm:mb-5">핵심 원자재 동향</span>
                   <div id="rendered-commodities-list" class="space-y-4 sm:space-y-5"></div>
                 </div>
               </div>
             </div>
 
-            <div>
-              <h3 class="text-sm sm:text-base font-bold text-slate-500 mb-4 sm:mb-6 flex items-center space-x-1.5 break-keep"><i data-lucide="newspaper" class="w-4 h-4 sm:w-5 sm:h-5 text-tossBlue"></i><span>주요 마켓 뉴스</span></h3>
-              <div id="rendered-news-container" class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5"></div>
+            <div class="space-y-6">
+              <h3 class="text-sm sm:text-base font-bold text-slate-500 flex items-center space-x-1.5 break-keep">
+                <i data-lucide="newspaper" class="w-4 h-4 sm:w-5 sm:h-5 text-tossBlue"></i><span>주요 마켓 뉴스</span>
+              </h3>
+              <hr class="border-t border-dashed border-slate-200">
+              <div id="rendered-news-container" class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 w-full"></div>
             </div>
 
-            <div>
-              <h3 class="text-sm sm:text-base font-bold text-slate-500 mb-4 sm:mb-6 flex items-center space-x-1.5 break-keep"><i data-lucide="star" class="w-4 h-4 sm:w-5 sm:h-5 text-amber-500"></i><span>오늘의 특징주 TOP 3 (클릭 시 실적 요약)</span></h3>
-              <div id="rendered-stocks-container" class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6"></div>
+            <div class="space-y-6">
+              <h3 class="text-sm sm:text-base font-bold text-slate-500 flex items-center space-x-1.5 break-keep">
+                <i data-lucide="star" class="w-4 h-4 sm:w-5 sm:h-5 text-amber-500"></i><span>오늘의 특징주 TOP 3 (클릭 시 실적 요약)</span>
+              </h3>
+              <hr class="border-t border-dashed border-slate-200">
+              <div id="rendered-stocks-container" class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 w-full"></div>
             </div>
 
-            <div class="border-t border-tossBorder pt-6 sm:pt-10">
-              <h3 class="text-sm sm:text-base font-bold text-slate-500 mb-4 sm:mb-6 flex items-center space-x-1.5 break-keep"><i data-lucide="file-text" class="w-4 h-4 sm:w-5 sm:h-5"></i><span>종합 분석 및 전망</span></h3>
-              <div class="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 shadow-sm leading-relaxed sm:leading-loose text-slate-800 text-sm sm:text-base lg:text-lg space-y-4 break-keep">
+            <div class="border-t border-tossBorder pt-6 sm:pt-10 w-full">
+              <h3 class="text-sm sm:text-base font-bold text-slate-500 mb-4 sm:mb-6 flex items-center space-x-1.5 break-keep">
+                <i data-lucide="file-text" class="w-4 h-4 sm:w-5 sm:h-5"></i><span>종합 분석 및 전망</span>
+              </h3>
+              <div class="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 shadow-sm leading-relaxed sm:leading-loose text-slate-800 text-sm sm:text-base lg:text-lg space-y-4 break-keep w-full">
                 <p id="rendered-analysis" class="whitespace-pre-line"></p>
               </div>
             </div>
@@ -242,18 +280,20 @@
     <div id="stock-modal-content" class="relative bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-auto overflow-hidden modal-enter flex flex-col max-h-[90vh]">
       <div class="px-6 py-5 sm:px-8 sm:py-6 border-b border-tossBorder flex items-center justify-between bg-white sticky top-0 z-10">
         <div>
-          <h3 id="modal-stock-name" class="text-xl sm:text-2xl font-bold text-slate-900 leading-tight break-keep"></h3>
-          <span id="modal-stock-ticker" class="text-sm sm:text-base font-bold text-slate-400 uppercase mt-1 sm:mt-1.5 block"></span>
+          <h3 id="modal-stock-name" class="text-xl sm:text-2xl font-bold text-slate-900 leading-tight break-words"></h3>
+          <span id="modal-stock-ticker" class="text-sm sm:text-base font-bold text-slate-400 uppercase mt-1 sm:mt-1.5 block break-all"></span>
         </div>
         <button onclick="closeStockModal()" class="w-10 h-10 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors">
           <i data-lucide="x" class="w-5 h-5 sm:w-6 sm:h-6"></i>
         </button>
       </div>
+      
       <div class="p-6 sm:p-8 overflow-y-auto scrollbar-hide">
         <div id="modal-loading" class="flex flex-col items-center justify-center py-12 sm:py-16 space-y-5">
           <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-4 border-tossBlue border-t-transparent animate-spin"></div>
-          <p class="text-sm sm:text-base font-bold text-slate-500 text-center leading-relaxed break-keep">AI가 기업 정보를 요약 중입니다...</p>
+          <p class="text-sm sm:text-base font-bold text-slate-500 text-center leading-relaxed break-keep mt-5">AI가 기업 정보를 요약 중입니다...</p>
         </div>
+
         <div id="modal-data" class="hidden space-y-6 sm:space-y-8">
           <div class="bg-slate-50 rounded-2xl p-5 sm:p-7 border border-slate-100 flex items-center justify-between">
             <div>
@@ -277,7 +317,7 @@
 
   <div id="toast" class="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-slate-900 text-white text-sm sm:text-base font-semibold px-6 py-3.5 sm:px-8 sm:py-4 rounded-full shadow-2xl flex items-center space-x-2.5 opacity-0 pointer-events-none transition-all duration-300 z-[60]">
     <i data-lucide="check" class="w-4.5 h-4.5 sm:w-5 sm:h-5 text-emerald-400" id="toast-icon"></i>
-    <span id="toast-message" class="break-keep text-center"></span>
+    <span id="toast-message" class="break-keep text-center whitespace-nowrap"></span>
   </div>
 
   <script>
@@ -287,6 +327,8 @@
       isLoading: false,
       reportData: null,
     };
+
+    let searchTimeout = null;
 
     window.onload = function() {
       const today = new Date();
@@ -359,12 +401,12 @@
       });
       
       if(!res.ok) {
-         let errMsg = 'API 연동 에러가 발생했습니다.';
+         let errMsg = 'API 연결 실패';
          try {
              const errData = await res.json();
              errMsg = errData.error || errMsg;
          } catch(e) {
-             errMsg = `서버 응답 오류 (상태 코드: ${res.status})`;
+             errMsg = `서버 오류 (${res.status})`;
          }
          throw new Error(errMsg);
       }
@@ -420,6 +462,15 @@
       return { text: 'text-slate-500', bg: 'bg-slate-50', icon: 'minus', ind: '' };
     }
 
+    function formatChangeValue(val) {
+      if (!val) return '0%';
+      let cleaned = val.replace(/^\+/, '').trim();
+      if (!cleaned.endsWith('%') && !cleaned.endsWith('p')) {
+        cleaned += '%';
+      }
+      return cleaned;
+    }
+
     function renderReport() {
       const data = state.reportData;
       if (!data) return;
@@ -447,15 +498,15 @@
 
       document.getElementById('rendered-indices-container').innerHTML = data.indices.map(item => {
         const st = getStyles(item.status, market);
-        const change = item.change.replace(/^\+/, '');
+        const change = formatChangeValue(item.change);
         return `
-          <div class="bg-white border border-slate-200 p-6 sm:p-7 rounded-2xl shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+          <div class="bg-white border border-slate-200 p-6 sm:p-7 rounded-2xl shadow-sm hover:shadow-md transition-all flex flex-col justify-between w-full">
             <div class="flex justify-between items-start mb-4 sm:mb-5">
-              <span class="text-sm sm:text-base font-bold text-slate-500 break-keep">${item.name}</span>
+              <span class="text-sm sm:text-base font-bold text-slate-500 break-words">${item.name}</span>
               <span class="px-2.5 py-1 rounded-md text-xs sm:text-sm font-bold ${st.text} ${st.bg} shrink-0"><i data-lucide="${st.icon}" class="w-3 h-3 sm:w-4 sm:h-4 inline-block mr-1"></i>${item.status==='up'?'상승':item.status==='down'?'하락':'보합'}</span>
             </div>
             <div>
-              <span class="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 tracking-tight block">${item.value}</span>
+              <span class="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 tracking-tight block break-words">${item.value}</span>
               <span class="text-sm sm:text-base font-bold mt-2 inline-block ${st.text}">${st.ind}${change}</span>
             </div>
           </div>
@@ -464,41 +515,44 @@
 
       const ex = data.macro.exchangeRate;
       const exSt = getStyles(ex.status, market);
+      const exChange = formatChangeValue(ex.change);
       document.getElementById('rendered-exchange-rate').innerText = ex.value;
-      document.getElementById('rendered-exchange-rate-change').innerHTML = `<span class="${exSt.text}">${exSt.ind}${ex.change.replace(/^\+/, '')}</span>`;
+      document.getElementById('rendered-exchange-rate-change').innerHTML = `<span class="${exSt.text}">${exSt.ind}${exChange}</span>`;
 
       const dx = data.macro.dollarIndex;
       const dxSt = getStyles(dx.status, market);
+      const dxChange = formatChangeValue(dx.change);
       document.getElementById('rendered-dollar-index').innerText = dx.value;
-      document.getElementById('rendered-dollar-index-change').innerHTML = `<span class="${dxSt.text}">${dxSt.ind}${dx.change.replace(/^\+/, '')}</span>`;
+      document.getElementById('rendered-dollar-index-change').innerHTML = `<span class="${dxSt.text}">${dxSt.ind}${dxChange}</span>`;
 
       document.getElementById('rendered-commodities-list').innerHTML = data.macro.commodities.map(c => {
         const cSt = getStyles(c.status, market);
-        return `<div class="flex justify-between items-center text-sm sm:text-base py-2.5 sm:py-3 border-b border-dashed border-slate-200 last:border-0"><span class="text-slate-700 font-bold break-keep">${c.name}</span><div class="text-right shrink-0"><span class="font-extrabold text-slate-900 mr-3">${c.value}</span><span class="text-xs sm:text-sm font-bold ${cSt.text}">${cSt.ind}${c.change.replace(/^\+/, '')}</span></div></div>`;
+        const cChange = formatChangeValue(c.change);
+        return `<div class="flex justify-between items-center text-sm sm:text-base py-2.5 sm:py-3 border-b border-dashed border-slate-200 last:border-0"><span class="text-slate-700 font-bold break-words">${c.name}</span><div class="text-right shrink-0"><span class="font-extrabold text-slate-900 mr-3 break-words">${c.value}</span><span class="text-xs sm:text-sm font-bold ${cSt.text}">${cSt.ind}${cChange}</span></div></div>`;
       }).join('');
 
       document.getElementById('rendered-news-container').innerHTML = data.news.map(n => 
-        `<div class="bg-slate-50 rounded-2xl p-5 sm:p-7 border border-slate-100 flex flex-col justify-between hover:bg-slate-100 transition-colors h-full">
-          <p class="text-sm sm:text-base lg:text-lg font-bold text-slate-800 leading-snug sm:leading-relaxed mb-4 break-keep">${n.title}</p>
+        `<div class="bg-slate-50 rounded-2xl p-5 sm:p-7 border border-slate-100 flex flex-col justify-between hover:bg-slate-100 transition-colors h-full w-full">
+          <p class="text-sm sm:text-base lg:text-lg font-bold text-slate-800 leading-snug sm:leading-relaxed mb-4 break-words">${n.title}</p>
           <span class="text-[11px] sm:text-xs font-bold text-slate-400 self-start bg-white px-2.5 py-1.5 rounded-md border border-slate-200 break-keep">${n.source}</span>
         </div>`
       ).join('');
 
       document.getElementById('rendered-stocks-container').innerHTML = data.stocks.map(s => {
         const st = getStyles(s.status, market);
-        const change = s.change.replace(/^\+/, '');
+        const sChange = formatChangeValue(s.change);
         return `
-          <div onclick="openStockModal('${s.name}', '${s.ticker}', '${market}')" class="bg-slate-50 rounded-2xl p-6 sm:p-7 border border-slate-200 flex flex-col justify-between hover:border-blue-300 hover:bg-blue-50/50 cursor-pointer transition-all shadow-sm hover:shadow-md h-full">
+          <div onclick="openStockModal('${s.name.replace(/'/g, "\\'")}', '${s.ticker}', '${market}')" class="bg-slate-50 rounded-2xl p-6 sm:p-7 border border-slate-200 flex flex-col justify-between hover:border-blue-300 hover:bg-blue-50/50 cursor-pointer transition-all shadow-sm hover:shadow-md h-full w-full">
             <div class="flex justify-between items-start mb-4 sm:mb-5 gap-3">
-              <div>
-                <h4 class="font-bold text-slate-900 text-lg sm:text-xl lg:text-2xl leading-tight break-keep mb-1 sm:mb-2">${s.name}</h4>
-                <span class="text-xs sm:text-sm text-slate-400 font-bold uppercase">${s.ticker}</span>
+              <div class="min-w-0">
+                <h4 class="font-bold text-slate-900 text-lg sm:text-xl lg:text-2xl leading-tight break-words mb-1 sm:mb-2">${s.name}</h4>
+                <span class="text-xs sm:text-sm text-slate-400 font-bold uppercase block break-words">${s.ticker}</span>
               </div>
-              <div class="text-right shrink-0">
-                <span class="text-lg sm:text-xl lg:text-2xl font-extrabold ${st.text} block tracking-tight">${st.ind}${change}</span>
+              <div class="text-right shrink-0 ml-3">
+                <span class="text-lg sm:text-xl lg:text-2xl font-extrabold ${st.text} block tracking-tight whitespace-nowrap">${st.ind}${sChange}</span>
               </div>
             </div>
-            <p class="text-xs sm:text-sm font-semibold text-tossTextGray leading-relaxed sm:leading-loose line-clamp-3 break-keep">${s.reason}</p>
+            <p class="text-xs sm:text-sm font-semibold text-tossTextGray leading-relaxed sm:leading-loose break-words">${s.reason}</p>
           </div>
         `;
       }).join('');
@@ -506,11 +560,65 @@
       lucide.createIcons();
     }
 
-    function searchCustomStock() {
-      const input = document.getElementById('custom-stock-input').value.trim();
-      if (!input) return showToast('검색할 종목명을 입력해주세요.', false);
-      openStockModal(input, '검색종목', state.activeMarket);
+    // --- 드롭다운 종목 자동완성 로직 ---
+    async function handleStockSearchInput() {
+      const query = document.getElementById('custom-stock-input').value.trim();
+      const dropdown = document.getElementById('stock-dropdown');
+      
+      if (!query) {
+        dropdown.classList.add('hidden');
+        return;
+      }
+
+      if (searchTimeout) clearTimeout(searchTimeout);
+      
+      searchTimeout = setTimeout(async () => {
+        dropdown.innerHTML = `<div class="p-4 text-center text-sm text-slate-500 font-semibold flex justify-center items-center gap-2"><div class="w-4 h-4 rounded-full border-2 border-tossBlue border-t-transparent animate-spin"></div>관련 종목을 찾고 있어요...</div>`;
+        dropdown.classList.remove('hidden');
+
+        try {
+          const results = await callGeminiAPI('search_stock', { query: query });
+          
+          if (results && results.length > 0) {
+            dropdown.innerHTML = results.map(item => `
+              <div onclick="selectDropdownStock('${item.name.replace(/'/g, "\\'")}', '${item.ticker}')" class="p-3.5 border-b border-slate-100 last:border-0 hover:bg-slate-50 cursor-pointer transition-colors flex justify-between items-center">
+                <div class="flex flex-col">
+                  <span class="font-bold text-slate-800 text-sm break-keep">${item.name}</span>
+                  <span class="text-[11px] text-tossBlue font-bold mt-0.5">${item.ticker}</span>
+                </div>
+                <span class="text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 ml-2 whitespace-nowrap">${item.exchange}</span>
+              </div>
+            `).join('');
+          } else {
+             dropdown.innerHTML = `<div class="p-4 text-center text-sm text-slate-500">일치하는 종목이 없습니다.</div>`;
+          }
+        } catch (e) {
+          dropdown.innerHTML = `<div class="p-4 text-center text-sm text-rose-500">검색 중 오류가 발생했습니다.</div>`;
+        }
+      }, 500); 
     }
+
+    function selectDropdownStock(name, ticker) {
+      document.getElementById('custom-stock-input').value = name;
+      document.getElementById('stock-dropdown').classList.add('hidden');
+      openStockModal(name, ticker, state.activeMarket);
+    }
+    
+    document.addEventListener('click', function(event) {
+      const input = document.getElementById('custom-stock-input');
+      const dropdown = document.getElementById('stock-dropdown');
+      if (input && dropdown && !input.contains(event.target) && !dropdown.contains(event.target)) {
+        dropdown.classList.add('hidden');
+      }
+    });
+    
+    function searchCustomStockManually() {
+      const query = document.getElementById('custom-stock-input').value.trim();
+      if (!query) return showToast('종목명을 입력해주세요.', false);
+      document.getElementById('stock-dropdown').classList.add('hidden');
+      openStockModal(query, '', state.activeMarket);
+    }
+    // ---------------------------------
 
     function closeStockModal() {
       const modal = document.getElementById('stock-modal');
@@ -523,21 +631,23 @@
       }, 200);
     }
 
-    async function openStockModal(name, ticker, market) {
+    function openStockModal(name, ticker, market) {
       const modal = document.getElementById('stock-modal');
       const content = document.getElementById('stock-modal-content');
-      
-      document.getElementById('modal-stock-name').innerText = name;
-      document.getElementById('modal-stock-ticker').innerText = ticker === '검색종목' ? '' : ticker;
-      
-      document.getElementById('modal-loading').classList.remove('hidden');
-      document.getElementById('modal-data').classList.add('hidden');
-
       modal.classList.remove('hidden');
       requestAnimationFrame(() => content.classList.add('modal-enter-active'));
+      loadStockDetail(name, ticker);
+    }
+
+    async function loadStockDetail(name, ticker) {
+      document.getElementById('modal-data').classList.add('hidden');
+      document.getElementById('modal-loading').classList.remove('hidden');
+
+      document.getElementById('modal-stock-name').innerText = name;
+      document.getElementById('modal-stock-ticker').innerText = ticker || '분석 중...';
 
       try {
-        const reqData = { name: name };
+        const reqData = { name: name, ticker: ticker };
         const detail = await callGeminiAPI('stock', reqData);
 
         document.getElementById('modal-company-info').innerText = detail.info;
@@ -546,8 +656,9 @@
         ul.innerHTML = detail.earnings.map(e => `<li class="relative pl-5 sm:pl-6"><span class="absolute left-0 top-2 w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-tossBlue"></span>${e}</li>`).join('');
 
         const sparkline = document.getElementById('modal-sparkline');
+        const market = state.activeMarket; 
         const st = getStyles(detail.trend, market);
-        document.getElementById('modal-trend-text').innerText = detail.trend === 'up' ? '호실적 / 상승세' : (detail.trend === 'down' ? '실적 둔화 / 하락세' : '안정적 유지');
+        document.getElementById('modal-trend-text').innerText = detail.trend === 'up' ? '상승 모멘텀 유지' : (detail.trend === 'down' ? '하방 압력 우세' : '안정적 흐름');
         document.getElementById('modal-trend-text').className = `text-sm sm:text-base font-bold mt-1.5 ${st.text}`;
         
         let bars = '';
@@ -563,7 +674,7 @@
         document.getElementById('modal-data').classList.remove('hidden');
 
       } catch (err) {
-        document.getElementById('modal-loading').innerHTML = `<p class="text-sm sm:text-base text-rose-500 font-bold break-keep">${err.message}</p>`;
+        document.getElementById('modal-loading').innerHTML = `<p class="text-sm sm:text-base text-rose-500 font-bold break-keep text-center">${err.message}</p>`;
       }
     }
 
@@ -572,27 +683,23 @@
       showToast('이미지 렌더링 중...');
       
       const targetWidth = 1024; 
+      el.classList.add('capture-mode');
 
       html2canvas(el, {
-        scale: 2,
+        scale: 2, 
         backgroundColor: '#ffffff',
         useCORS: true,
         width: targetWidth,
         windowWidth: targetWidth,
-        onclone: function(clonedDoc) {
-          const clonedEl = clonedDoc.getElementById('report-canvas-area');
-          clonedDoc.body.style.width = targetWidth + 'px';
-          clonedEl.style.width = targetWidth + 'px';
-          clonedEl.style.minWidth = targetWidth + 'px';
-          clonedEl.style.margin = '0 auto';
-        }
       }).then(canvas => {
+        el.classList.remove('capture-mode');
         const link = document.createElement('a');
         link.download = `Market_Report.png`;
         link.href = canvas.toDataURL('image/png');
         link.click();
         showToast('이미지 저장 완료!');
       }).catch(err => {
+        el.classList.remove('capture-mode');
         console.error(err);
         showToast('이미지 저장 중 오류가 발생했습니다.', false);
       });
@@ -606,13 +713,13 @@
       md += `* **요약**: ${data.summary}\n\n---\n\n`;
       
       md += `#### 1. 주요 시장 지수\n`;
-      data.indices.forEach(item => { md += `- ${item.name}: ${item.value} (${item.change})\n`; });
+      data.indices.forEach(item => { md += `- ${item.name}: ${item.value} (${formatChangeValue(item.change)})\n`; });
       md += `\n---\n\n`;
       
-      md += `#### 2. 주요 거시 지표\n`;
-      md += `- 환율: ${data.macro.exchangeRate.value} (${data.macro.exchangeRate.change})\n`;
-      md += `- 달러 인덱스: ${data.macro.dollarIndex.value} (${data.macro.dollarIndex.change})\n`;
-      data.macro.commodities.forEach(item => { md += `- ${item.name}: ${item.value} (${item.change})\n`; });
+      #### 2. 주요 거시 지표\n`;
+      md += `- 환율: ${data.macro.exchangeRate.value} (${formatChangeValue(data.macro.exchangeRate.change)})\n`;
+      md += `- 달러 인덱스: ${data.macro.dollarIndex.value} (${formatChangeValue(data.macro.dollarIndex.change)})\n`;
+      data.macro.commodities.forEach(item => { md += `- ${item.name}: ${item.value} (${formatChangeValue(item.change)})\n`; });
       md += `\n---\n\n`;
       
       if (data.sectors && data.sectors.length > 0) {
@@ -620,7 +727,7 @@
       }
       
       md += `#### 4. 주요 특징주\n`;
-      data.stocks.forEach(stock => { md += `- **${stock.name} (${stock.ticker})** [${stock.change}]\n  : ${stock.reason}\n`; });
+      data.stocks.forEach(stock => { md += `- **${stock.name} (${stock.ticker})** [${formatChangeValue(stock.change)}]\n  : ${stock.reason}\n`; });
       md += `\n---\n\n`;
       
       md += `#### 5. 종합 분석 및 전망\n${data.analysis}\n`;

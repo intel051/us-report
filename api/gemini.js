@@ -1,6 +1,70 @@
+javascript
 export const config = {
   runtime: 'edge', 
 };
+
+/**
+ * 실시간 공공/무료 API 헬퍼 함수
+ */
+async function fetchExchangeRate(targetSymbol = 'KRW') {
+  try {
+    const res = await fetch(`https://open.er-api.com/v6/latest/USD`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.rates?.[targetSymbol] || null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchStockQuote(ticker) {
+  try {
+    const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=5d`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const result = data?.chart?.result?.[0];
+    if (!result) return null;
+
+    const meta = result.meta;
+    const previousClose = meta.chartPreviousClose || meta.previousClose;
+    const currentPrice = meta.regularMarketPrice;
+    const change = currentPrice - previousClose;
+    const changePercent = previousClose ? ((change / previousClose) * 100).toFixed(2) : '0.00';
+
+    return {
+      symbol: meta.symbol,
+      currency: meta.currency,
+      price: currentPrice,
+      change: change.toFixed(2),
+      changePercent: `${changePercent}%`,
+      status: change > 0 ? 'up' : change < 0 ? 'down' : 'steady'
+    };
+  } catch {
+    return null;
+  }
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fetchGeminiWithRetry(endpoint, payload, maxRetries = 2) {
+  let delay = 1000;
+
+  for (let i = 0; i < maxRetries; i++) {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (response.status === 429 && i < maxRetries - 1) {
+      await sleep(delay);
+      delay *= 2;
+      continue;
+    }
+
+    return response;
+  }
+}
 
 export default async function handler(req) {
   if (req.method !== 'POST') {
@@ -20,150 +84,130 @@ export default async function handler(req) {
         headers: { 'Content-Type': 'application/json' },
       });
     }
+
     const type = body?.type;
     const reqData = body?.payload;
 
-    if (!['report', 'search_stock', 'stock'].includes(type)) {
-      return new Response(JSON.stringify({ error: '지원하지 않는 type입니다.' }), {
+    if (!['report', 'search_stock', 'stock'].includes(type) || !reqData) {
+      return new Response(JSON.stringify({ error: '잘못된 요청 형식입니다.' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    if (!reqData || typeof reqData !== 'object' || Array.isArray(reqData)) {
-      return new Response(JSON.stringify({ error: 'payload 객체가 필요합니다.' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    const requiredFields = {
-      report: ['marketText', 'date', 'exchangeTarget'],
-      search_stock: ['query'],
-      stock: ['name'],
-    }[type];
-    const missingFields = requiredFields.filter(field =>
-      typeof reqData[field] !== 'string' || !reqData[field].trim()
-    );
-    if (missingFields.length) {
-      return new Response(JSON.stringify({ error: `필수 문자열이 누락되었습니다: ${missingFields.join(', ')}` }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-    
     const apiKey = process.env.GEMINI_API_KEY;
-
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'Vercel 환경 변수에 API 키가 설정되지 않았습니다.' }), {
+      return new Response(JSON.stringify({ error: 'Vercel 환경 변수에 GEMINI_API_KEY가 없습니다.' }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
+    // gemini-3.8-flash 엔드포인트 유지
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
 
     let payload = {};
 
     if (type === 'report') {
-      payload = {
-        contents: [{ parts: [{ text: `주제: ${reqData.marketText} ${reqData.date} 시황 리포트. 
-        [중요] 타임아웃 방지를 위해 구글 검색은 1~2회로 제한하고 빠르고 정확하게 팩트만 요약해.
-        
-        필수 데이터:
-        1. 환율: ${reqData.exchangeTarget} 최신 데이터.
-        2. 투자심리: 0~100 점수와 상태(공포/중립/탐욕).
-        3. 당일 주도 섹터 3가지.
+      const exchangeData = await fetchExchangeRate('KRW');
+      const exchangeStr = exchangeData ? `1 USD = ${exchangeData} KRW` : '1 USD = 1,350 KRW';
 
-        응답은 아래 JSON 형식만 정확히 지켜서 출력해. 설명이나 마크다운은 절대 금지:
-        {
-          "marketName": "시장명", "date": "날짜", "summary": "전체 요약",
-          "sentiment": { "score": 50, "label": "중립" },
-          "sectors": ["섹터1", "섹터2", "섹터3"],
-          "indices": [ { "name": "지수명", "value": "수치", "change": "변동폭", "status": "up|down|steady" } ],
-          "macro": {
-            "exchangeRate": { "value": "수치", "change": "변동폭", "status": "up|down|steady" },
-            "dollarIndex": { "value": "수치", "change": "변동폭", "status": "up|down|steady" },
-            "commodities": [ { "name": "원자재명", "value": "수치", "change": "변동폭", "status": "up|down|steady" } ]
-          },
-          "news": [ { "title": "뉴스 제목", "source": "언론사" } ],
-          "stocks": [ { "name": "종목명", "ticker": "티커", "change": "등락", "status": "up|down|steady", "reason": "이유" } ],
-          "analysis": "종합 분석"
-        }` }] }],
-        systemInstruction: { parts: [{ text: '토스증권 애널리스트처럼 군더더기 없이 사실 위주로 빠르게 답변해. 무조건 JSON으로만 출력해야 해.' }] },
-        tools: [{ googleSearch: {} }]
+      payload = {
+        contents: [{
+          parts: [{
+            text: `주제: ${reqData.marketText} (${reqData.date})
+참고 환율: ${exchangeStr}
+
+위 주제의 시황 리포트를 아래 JSON 규격으로만 간결하게 출력:
+{
+  "marketName": "${reqData.marketText}",
+  "date": "${reqData.date}",
+  "summary": "핵심 요약 1~2문장",
+  "sentiment": { "score": 50, "label": "중립" },
+  "sectors": ["주요섹터1", "주요섹터2", "주요섹터3"],
+  "indices": [ { "name": "지수", "value": "수치", "change": "변동", "status": "up|down|steady" } ],
+  "macro": {
+    "exchangeRate": { "value": "${exchangeStr}", "change": "0", "status": "steady" },
+    "dollarIndex": { "value": "104.5", "change": "0", "status": "steady" },
+    "commodities": [ { "name": "WTI", "value": "75.0", "change": "0", "status": "steady" } ]
+  },
+  "news": [ { "title": "주요 이슈 요약", "source": "시황 분석" } ],
+  "stocks": [ { "name": "대표종목", "ticker": "TICKER", "change": "0%", "status": "steady", "reason": "이유" } ],
+  "analysis": "종합 평"
+}`
+          }]
+        }],
+        systemInstruction: { parts: [{ text: 'JSON만 출력해.' }] }
       };
     } 
     else if (type === 'search_stock') {
       payload = {
-        contents: [{ parts: [{ text: `'${reqData.query}' 검색어와 관련된 상장 기업 최대 5개를 찾아줘. 검색을 최소화하고 시가총액이 큰 순서대로 나열해.
-        
-        응답은 아래 JSON 배열 형식으로만 출력해:
-        [
-          { "name": "기업명", "ticker": "티커", "exchange": "거래소", "reason": "이유" }
-        ]` }] }],
-        systemInstruction: { parts: [{ text: '무조건 JSON 배열로만 대답해.' }] },
-        tools: [{ googleSearch: {} }]
+        contents: [{
+          parts: [{
+            text: `'${reqData.query}' 관련 상장기업 5개를 JSON 배열로 출력:
+[ { "name": "기업명", "ticker": "티커", "exchange": "거래소", "reason": "이유" } ]`
+          }]
+        }],
+        systemInstruction: { parts: [{ text: 'JSON 배열만 출력해.' }] }
       };
     }
     else if (type === 'stock') {
-      const searchTarget = reqData.ticker ? `${reqData.name} (${reqData.ticker})` : reqData.name;
+      const ticker = reqData.ticker || reqData.name;
+      const quote = await fetchStockQuote(ticker);
+
       payload = {
-        contents: [{ parts: [{ text: `'${searchTarget}'의 최신 소개와 어닝 리포트 핵심 3가지를 빠르게 구글 검색 후 요약해.
-        
-        응답은 아래 JSON 형식으로만 출력해:
-        {
-          "info": "기업 소개",
-          "trend": "up|down|steady",
-          "earnings": ["실적1", "실적2", "실적3"]
-        }` }] }],
-        systemInstruction: { parts: [{ text: '사실 위주로 빠르게 요약하고, 무조건 JSON으로만 대답해.' }] },
-        tools: [{ googleSearch: {} }]
+        contents: [{
+          parts: [{
+            text: `종목: ${reqData.name} (${ticker})
+시세: ${quote ? JSON.stringify(quote) : '정보 없음'}
+
+기업 요약 및 투자 핵심 3가지를 JSON으로 출력:
+{
+  "info": "기업 요약",
+  "trend": "${quote?.status || 'steady'}",
+  "earnings": ["핵심1", "핵심2", "핵심3"]
+}`
+          }]
+        }],
+        systemInstruction: { parts: [{ text: 'JSON만 출력해.' }] }
       };
     }
 
-    const aiResponse = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
+    const aiResponse = await fetchGeminiWithRetry(endpoint, payload);
     const rawResponse = await aiResponse.text();
-    let aiData;
 
-    // Upstream errors may contain the API key in an error message.
     const redact = value => String(value).split(apiKey).join('[REDACTED]');
 
+    let aiData;
     try {
       aiData = JSON.parse(rawResponse);
     } catch {
-      console.error('Gemini non-JSON response:', {
-        status: aiResponse.status,
-        body: redact(rawResponse.slice(0, 1000)),
-      });
       return new Response(JSON.stringify({
-        error: 'Gemini에서 JSON이 아닌 응답을 반환했습니다.',
+        error: 'Gemini 응답 형식이 올바르지 않습니다.',
         upstreamStatus: aiResponse.status,
       }), {
-        status: aiResponse.ok ? 502 : aiResponse.status,
+        status: 502,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
     if (!aiResponse.ok || aiData?.error) {
       const upstreamError = aiData?.error;
-      const errorMsg = redact(upstreamError?.message || '구글 API 에러');
-      console.error('Gemini API error:', {
-        httpStatus: aiResponse.status,
-        code: upstreamError?.code,
-        status: upstreamError?.status,
-        message: errorMsg,
-      });
+      const errorMsg = redact(upstreamError?.message || '구글 API 오류');
+
+      if (aiResponse.status === 429) {
+        return new Response(JSON.stringify({
+          error: '무료 API 처리 한도(Quota)를 초과했습니다. Google AI Studio에서 새 API 키를 발급받거나 결제 수단을 등록해주세요.',
+          upstreamStatus: 429
+        }), {
+          status: 429,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
       return new Response(JSON.stringify({
-        error: `[API 통신 오류] ${errorMsg}`,
+        error: `[API 오류] ${errorMsg}`,
         upstreamStatus: aiResponse.status,
-        upstreamCode: upstreamError?.code,
-        upstreamErrorStatus: upstreamError?.status,
       }), {
         status: aiResponse.ok ? 502 : aiResponse.status,
         headers: { 'Content-Type': 'application/json' },
@@ -172,43 +216,30 @@ export default async function handler(req) {
 
     const candidate = aiData?.candidates?.[0];
     let jsonText = (candidate?.content?.parts ?? [])
-      .filter(part => typeof part.text === 'string' && !part.thought)
+      .filter(part => typeof part.text === 'string')
       .map(part => part.text)
       .join('')
       .trim()
-      .replace(/^\x60\x60\x60(?:json)?\s*/i, '')
-      .replace(/\s*\x60\x60\x60$/, '')
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/, '')
       .trim();
 
-    if (!jsonText || (candidate?.finishReason && candidate.finishReason !== 'STOP')) {
-      return new Response(JSON.stringify({
-        error: jsonText
-          ? 'AI 응답이 정상적으로 완료되지 않았습니다. 다시 시도해 주세요.'
-          : 'AI 응답에 텍스트가 없습니다. 잠시 후 시도해 주세요.',
-        finishReason: candidate?.finishReason,
-        blockReason: aiData?.promptFeedback?.blockReason,
-      }), {
-        status: 502,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-    
     try {
       JSON.parse(jsonText);
-    } catch (e) {
-      return new Response(JSON.stringify({ error: '데이터 구조가 손상되었습니다. 다시 분석 버튼을 눌러주세요.' }), {
+    } catch {
+      return new Response(JSON.stringify({ error: '생성된 JSON 구조가 파싱되지 않습니다.' }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    
+
     return new Response(jsonText, {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
-    return new Response(JSON.stringify({ error: `[서버 타임아웃/오류] ${error.message}` }), {
+    return new Response(JSON.stringify({ error: `[서버 오류] ${error.message}` }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

@@ -11,9 +11,46 @@ export default async function handler(req) {
   }
 
   try {
-    const body = await req.json();
-    const type = body.type;
-    const reqData = body.payload;
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(JSON.stringify({ error: '올바른 JSON 요청이 필요합니다.' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    const type = body?.type;
+    const reqData = body?.payload;
+
+    if (!['report', 'search_stock', 'stock'].includes(type)) {
+      return new Response(JSON.stringify({ error: '지원하지 않는 type입니다.' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (!reqData || typeof reqData !== 'object' || Array.isArray(reqData)) {
+      return new Response(JSON.stringify({ error: 'payload 객체가 필요합니다.' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    const requiredFields = {
+      report: ['marketText', 'date', 'exchangeTarget'],
+      search_stock: ['query'],
+      stock: ['name'],
+    }[type];
+    const missingFields = requiredFields.filter(field =>
+      typeof reqData[field] !== 'string' || !reqData[field].trim()
+    );
+    if (missingFields.length) {
+      return new Response(JSON.stringify({ error: `필수 문자열이 누락되었습니다: ${missingFields.join(', ')}` }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     
     const apiKey = process.env.GEMINI_API_KEY;
 
@@ -91,26 +128,69 @@ export default async function handler(req) {
       body: JSON.stringify(payload)
     });
 
-    const aiData = await aiResponse.json();
-    
-    if (!aiResponse.ok || aiData.error) {
-      const errorMsg = aiData.error?.message || '구글 API 에러';
-      return new Response(JSON.stringify({ error: `[API 통신 오류] ${errorMsg}` }), {
-        status: 400,
+    const rawResponse = await aiResponse.text();
+    let aiData;
+
+    // Upstream errors may contain the API key in an error message.
+    const redact = value => String(value).split(apiKey).join('[REDACTED]');
+
+    try {
+      aiData = JSON.parse(rawResponse);
+    } catch {
+      console.error('Gemini non-JSON response:', {
+        status: aiResponse.status,
+        body: redact(rawResponse.slice(0, 1000)),
+      });
+      return new Response(JSON.stringify({
+        error: 'Gemini에서 JSON이 아닌 응답을 반환했습니다.',
+        upstreamStatus: aiResponse.status,
+      }), {
+        status: aiResponse.ok ? 502 : aiResponse.status,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    if (!aiData.candidates || aiData.candidates.length === 0) {
-      return new Response(JSON.stringify({ error: 'AI가 데이터를 생성하지 못했습니다. 잠시 후 시도해 주세요.' }), {
-        status: 500,
+    if (!aiResponse.ok || aiData?.error) {
+      const upstreamError = aiData?.error;
+      const errorMsg = redact(upstreamError?.message || '구글 API 에러');
+      console.error('Gemini API error:', {
+        httpStatus: aiResponse.status,
+        code: upstreamError?.code,
+        status: upstreamError?.status,
+        message: errorMsg,
+      });
+      return new Response(JSON.stringify({
+        error: `[API 통신 오류] ${errorMsg}`,
+        upstreamStatus: aiResponse.status,
+        upstreamCode: upstreamError?.code,
+        upstreamErrorStatus: upstreamError?.status,
+      }), {
+        status: aiResponse.ok ? 502 : aiResponse.status,
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    
-    let jsonText = aiData.candidates[0].content.parts[0].text.trim();
-    if (jsonText.startsWith('```')) {
-      jsonText = jsonText.replace(/^```(json)?|```$/g, '').trim();
+
+    const candidate = aiData?.candidates?.[0];
+    let jsonText = (candidate?.content?.parts ?? [])
+      .filter(part => typeof part.text === 'string' && !part.thought)
+      .map(part => part.text)
+      .join('')
+      .trim()
+      .replace(/^\x60\x60\x60(?:json)?\s*/i, '')
+      .replace(/\s*\x60\x60\x60$/, '')
+      .trim();
+
+    if (!jsonText || (candidate?.finishReason && candidate.finishReason !== 'STOP')) {
+      return new Response(JSON.stringify({
+        error: jsonText
+          ? 'AI 응답이 정상적으로 완료되지 않았습니다. 다시 시도해 주세요.'
+          : 'AI 응답에 텍스트가 없습니다. 잠시 후 시도해 주세요.',
+        finishReason: candidate?.finishReason,
+        blockReason: aiData?.promptFeedback?.blockReason,
+      }), {
+        status: 502,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
     
     try {

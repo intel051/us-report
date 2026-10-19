@@ -1,4 +1,3 @@
-javascript
 export const config = {
   runtime: 'edge', 
 };

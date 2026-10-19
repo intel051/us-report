@@ -2,13 +2,26 @@ export const config = {
   runtime: 'edge', 
 };
 
-/**
- * 실시간 공공/무료 API 헬퍼 함수
- */
+async function fetchWithTimeout(resource, options = {}, timeoutMs = 4000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(resource, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(id);
+    return response;
+  } catch (err) {
+    clearTimeout(id);
+    return null;
+  }
+}
+
 async function fetchExchangeRate(targetSymbol = 'KRW') {
   try {
-    const res = await fetch(`https://open.er-api.com/v6/latest/USD`);
-    if (!res.ok) return null;
+    const res = await fetchWithTimeout(`https://open.er-api.com/v6/latest/USD`, {}, 3000);
+    if (!res || !res.ok) return null;
     const data = await res.json();
     return data?.rates?.[targetSymbol] || null;
   } catch {
@@ -18,8 +31,8 @@ async function fetchExchangeRate(targetSymbol = 'KRW') {
 
 async function fetchStockQuote(ticker) {
   try {
-    const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=5d`);
-    if (!res.ok) return null;
+    const res = await fetchWithTimeout(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=5d`, {}, 3000);
+    if (!res || !res.ok) return null;
     const data = await res.json();
     const result = data?.chart?.result?.[0];
     if (!result) return null;
@@ -40,28 +53,6 @@ async function fetchStockQuote(ticker) {
     };
   } catch {
     return null;
-  }
-}
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function fetchGeminiWithRetry(endpoint, payload, maxRetries = 2) {
-  let delay = 1000;
-
-  for (let i = 0; i < maxRetries; i++) {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    if (response.status === 429 && i < maxRetries - 1) {
-      await sleep(delay);
-      delay *= 2;
-      continue;
-    }
-
-    return response;
   }
 }
 
@@ -102,7 +93,6 @@ export default async function handler(req) {
       });
     }
 
-    // gemini-3.8-flash 엔드포인트 유지
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
 
     let payload = {};
@@ -136,7 +126,11 @@ export default async function handler(req) {
 }`
           }]
         }],
-        systemInstruction: { parts: [{ text: 'JSON만 출력해.' }] }
+        systemInstruction: { parts: [{ text: 'JSON만 출력해.' }] },
+        generationConfig: {
+          maxOutputTokens: 600,
+          temperature: 0.2
+        }
       };
     } 
     else if (type === 'search_stock') {
@@ -147,7 +141,11 @@ export default async function handler(req) {
 [ { "name": "기업명", "ticker": "티커", "exchange": "거래소", "reason": "이유" } ]`
           }]
         }],
-        systemInstruction: { parts: [{ text: 'JSON 배열만 출력해.' }] }
+        systemInstruction: { parts: [{ text: 'JSON 배열만 출력해.' }] },
+        generationConfig: {
+          maxOutputTokens: 300,
+          temperature: 0.1
+        }
       };
     }
     else if (type === 'stock') {
@@ -168,13 +166,38 @@ export default async function handler(req) {
 }`
           }]
         }],
-        systemInstruction: { parts: [{ text: 'JSON만 출력해.' }] }
+        systemInstruction: { parts: [{ text: 'JSON만 출력해.' }] },
+        generationConfig: {
+          maxOutputTokens: 400,
+          temperature: 0.2
+        }
       };
     }
 
-    const aiResponse = await fetchGeminiWithRetry(endpoint, payload);
-    const rawResponse = await aiResponse.text();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
 
+    let aiResponse;
+    try {
+      aiResponse = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        return new Response(JSON.stringify({ error: 'AI 응답 시간이 20초를 초과하여 요청이 취소되었습니다.' }), {
+          status: 504,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    const rawResponse = await aiResponse.text();
     const redact = value => String(value).split(apiKey).join('[REDACTED]');
 
     let aiData;

@@ -4,10 +4,11 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 const apiSource = readFileSync(new URL('../api/gemini.js', import.meta.url), 'utf8');
 const libSource = readFileSync(new URL('../lib/market-data.js', import.meta.url), 'utf8');
+const universeSource = readFileSync(new URL('../lib/stock-universe.js', import.meta.url), 'utf8');
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const dataUrl = source => 'data:text/javascript;base64,' + Buffer.from(source).toString('base64');
 async function fresh() {
-  const libUrl = dataUrl(libSource + '\n//' + Math.random());
+  const libUrl = dataUrl(libSource.replace("'./stock-universe.js'", JSON.stringify(dataUrl(universeSource))) + '\n//' + Math.random());
   const api = await import(dataUrl(apiSource.replace("'../lib/market-data.js'", JSON.stringify(libUrl)) + '\n//' + Math.random()));
   return { handler: api.default, lib: await import(libUrl) };
 }
@@ -18,7 +19,7 @@ const rss = '<rss><channel>' + item('Nasdaq rises &amp; US stocks close higher')
 let aiCalls, publicCalls, aiResponder, feedResponder, lastPayload;
 const install = () => {
   aiCalls = publicCalls = 0; lastPayload = null;
-  aiResponder = () => Response.json({ candidates: [{ finishReason: 'STOP', content: { parts: [{ thought: true, text: 'not json' }, { text: JSON.stringify({ summary: '주요 지수가 상승했습니다.', analysis: '기사 제목은 기술주 관련 재료를 언급합니다. 원인으로 작용했을 가능성이 있습니다. 추가 공시를 확인하세요.' }) }] } }], usageMetadata: { promptTokenCount: 400, candidatesTokenCount: 150 } });
+  aiResponder = () => Response.json({ candidates: [{ finishReason: 'STOP', content: { parts: [{ thought: true, text: 'not json' }, { text: JSON.stringify({ title:'기술주가 이끈 하루', summary: '주요 지수가 상승했습니다.', sections: [{heading:'지수와 분위기',text:'주요 지수가 상승했습니다.'},{heading:'업종과 특징주',text:'기술주 관련 기사가 확인됐습니다.'},{heading:'금리와 환율',text:'관측 시각 차이에 주의가 필요합니다.'}], watchpoints:['추가 공시 확인'] }) }] } }], usageMetadata: { promptTokenCount: 400, candidatesTokenCount: 150 } });
   feedResponder = url => url.includes('/rss/') ? new Response(rss) : url.includes('/search?') ? Response.json({ quotes: [{ symbol: 'AAPL', longname: 'Apple', exchange: 'NASDAQ', quoteType: 'EQUITY' }, { symbol: 'BTC', quoteType: 'CRYPTOCURRENCY' }] }) : Response.json(chart());
   globalThis.fetch = async (url, options) => {
     if (url.includes('generativelanguage')) { aiCalls++; lastPayload = JSON.parse(options.body); return aiResponder(url, options); }
@@ -42,10 +43,10 @@ await scenario('successful AI only replaces prose; payload has no search tool an
   const report = await (await handler(request({ market: 'US', date: '2026-10-16', useAI: true }))).json();
   assert.equal(report.analysisMode, 'ai'); assert.equal(report.indices[0].value, '110'); assert.equal(aiCalls, 1);
   assert(!lastPayload.tools); assert.equal(lastPayload.generationConfig.thinkingConfig.thinkingBudget, 0);
-  assert.equal(lastPayload.generationConfig.maxOutputTokens, 1024);
-  assert.deepEqual(Object.keys(lastPayload.generationConfig.responseJsonSchema.properties), ['summary', 'analysis']);
+  assert.equal(lastPayload.generationConfig.maxOutputTokens, 2048);
+  assert.deepEqual(Object.keys(lastPayload.generationConfig.responseJsonSchema.properties), ['title', 'summary', 'sections', 'watchpoints']);
   const compact = JSON.parse(lastPayload.contents[0].parts[0].text);
-  assert(compact.headlines.length <= 3); assert(JSON.stringify(lastPayload).length < 3000); assert(!JSON.stringify(lastPayload).includes('test-secret'));
+  assert(compact.headlines.length <= 3); assert(JSON.stringify(lastPayload).length < 6000); assert(!JSON.stringify(lastPayload).includes('test-secret'));
 });
 await scenario('concurrent repeated reports coalesce public fetches and AI; successful interpretation reused', async ({ handler }) => {
   const r = () => handler(request({ market: 'US', date: '2026-10-16', useAI: true }));
@@ -111,7 +112,7 @@ await scenario('frontend scripts parse, default excludes AI, no fabricated stock
 await scenario('report UI renders baseline, source links and explicit empty-data states', async () => {
   const ids = new Set([...html.matchAll(/id="([^"]+)"/g)].map(m => m[1]));
   const elements = new Map();
-  const node = () => ({ children: [], style: {}, dataset: {}, classList: { add() {}, remove() {} }, appendChild(child) { this.children.push(child); }, replaceChildren() { this.children = []; }, addEventListener() {}, setAttribute() {} });
+  const node = () => ({ children: [], style: {}, dataset: {}, classList: { add() {}, remove() {}, toggle() {} }, appendChild(child) { this.children.push(child); }, replaceChildren() { this.children = []; }, addEventListener() {}, setAttribute() {} });
   const document = { getElementById(id) { assert(ids.has(id), `missing DOM id ${id}`); if (!elements.has(id)) elements.set(id, node()); return elements.get(id); }, createElement: node, querySelectorAll() { return []; }, addEventListener() {} };
   const ctx = vm.createContext({ window: {}, document, Date, Intl, setTimeout, clearTimeout, console, URL, lucide: { createIcons() {} } });
   vm.runInContext([...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)[1], ctx);
@@ -128,4 +129,72 @@ await scenario('default date chooses most recent closed local weekday for US/KR'
   vm.runInContext([...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)[1], ctx);
   vm.runInContext("setDefaultDate('US')", ctx); assert.equal(picker.value, '2026-10-19');
   vm.runInContext("setDefaultDate('KR')", ctx); assert.equal(picker.value, '2026-10-19');
+});
+await scenario('headline companies become dated featured stocks with sources, not a movers ranking', async ({ handler }) => {
+  const original = feedResponder;
+  feedResponder = url => url.includes('/rss/') ? new Response('<rss>' + item('Nvidia and AMD lead tech stocks as Nasdaq closes higher') + item('Tesla jumps after company update') + '</rss>') : original(url);
+  const report = await (await handler(request())).json();
+  assert(report.stocks.some(s => s.ticker === 'NVDA')); assert(report.stocks.some(s => s.ticker === 'AMD'));
+  for (const stock of report.stocks) { assert.equal(stock.date, '2026-10-16'); assert.equal(stock.change, '+10.00%'); assert(stock.url.startsWith('https:')); assert(stock.reason.length); assert(stock.selection.includes('전체 시장')); }
+});
+await scenario('featured stocks retain news but mark missing selected-day prices unknown', async ({ handler }) => {
+  const original = feedResponder;
+  feedResponder = url => url.includes('/rss/') ? new Response('<rss>' + item('Nvidia rises on chip news') + '</rss>') : url.includes('/NVDA?') ? Response.json(chart([100, 110], ['2026-10-14', '2026-10-15'])) : original(url);
+  const report = await (await handler(request())).json(); const stock = report.stocks.find(s => s.ticker === 'NVDA');
+  assert(stock); assert.equal(stock.change, '확인 불가'); assert.equal(stock.status, 'unknown'); assert(stock.reason.includes('Nvidia'));
+});
+await scenario('sector proxies and yield basis-point changes are exact data-derived values', async ({ handler }) => {
+  const original = feedResponder;
+  feedResponder = url => url.includes('%5ETNX?') ? Response.json(chart([4, 4.05])) : original(url);
+  const report = await (await handler(request())).json();
+  assert.equal(report.sectorPerformance.length, 11); assert(report.sectorPerformance.every(s => s.proxy.includes('ETF')));
+  const yieldValue = report.crossAssets.find(s => s.symbol === '^TNX'); assert.equal(yieldValue.value, '4.05%'); assert.equal(yieldValue.change, '5.0bp');
+});
+await scenario('selected-day stock detail never returns latest history from a different day', async ({ handler }) => {
+  const data = await (await handler(request({ name:'Apple', ticker:'AAPL', market:'US', date:'2026-10-16' }, 'stock'))).json();
+  assert(data.info.includes('2026-10-16')); assert.equal(data.closeHistory.at(-1), 110);
+});
+await scenario('review has three validated sections; malformed sections preserve baseline', async ({ handler }) => {
+  aiResponder = () => Response.json({ candidates: [{finishReason:'STOP',content:{parts:[{text:JSON.stringify({title:'제목',summary:'요약',sections:[{heading:'하나',text:42}],watchpoints:[]})}]}}] });
+  const result = await (await handler(request({market:'US',date:'2026-10-16',useAI:true}))).json(); assert.equal(result.analysisMode,'basic'); assert.equal(result.aiStatus,'invalid');
+});
+await scenario('same-day incomplete cross-market bars are labelled as observations', async ({ lib }) => {
+  const date = lib.dayIn(Date.now(), 'America/New_York');
+  const now = Math.floor(Date.now() / 1000);
+  feedResponder = () => Response.json({chart:{result:[{meta:{exchangeTimezoneName:'America/New_York',currentTradingPeriod:{regular:{end:now+3600}}},timestamp:[now-86400,now],indicators:{quote:[{close:[100,102]}]}}]}});
+  const quote = await lib.dailyQuote('USD','TEST',date,'America/New_York'); assert.equal(quote.session,'in_progress'); assert(quote.basis.includes('확정 종가 아님'));
+});
+await scenario('company alias coverage includes Korean and Japanese featured stocks', async () => {
+  const universe = await import(dataUrl(universeSource));
+  assert.equal(universe.matchFeaturedCompanies([{title:'[특징주] 현대로템, 거래량 증가'}],'KR')[0].ticker,'064350.KS');
+  assert.equal(universe.matchFeaturedCompanies([{title:'ソフトバンクG、東京エレクトロンなど'}],'JP').length,2);
+  assert.equal(universe.matchFeaturedCompanies([{title:'AI report and IPO market'}],'US').length,0);
+});
+await scenario('UI automatically starts a separate writer request after rendering collected data', async () => {
+  const order=[]; const elements=new Map();
+  const node=()=>({style:{},checked:true,children:[],classList:{add(){},remove(){},toggle(){}},appendChild(c){this.children.push(c)},replaceChildren(){this.children=[]}});
+  const doc={getElementById(id){if(!elements.has(id))elements.set(id,node());return elements.get(id)},addEventListener(){}};
+  doc.getElementById('date-picker').value='2026-10-16';
+  const ctx=vm.createContext({window:{},document:doc,Date,Intl,URL,setTimeout,clearTimeout,order});
+  vm.runInContext([...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)[1],ctx);
+  vm.runInContext("callMarketAPI=async()=>({date:'2026-10-16',market:'US'});renderReport=()=>order.push('render-data');showToast=()=>{};addAIInterpretation=async()=>order.push('write-review');",ctx);
+  await vm.runInContext('generateMarketReport()',ctx); assert.deepEqual(order,['render-data','write-review']);
+});
+await scenario('partial data can still produce a clearly scoped daily review', async ({ handler }) => {
+  const original = feedResponder;
+  feedResponder = url => url.includes('/chart/') ? new Response('unavailable',{status:503}) : original(url);
+  const report = await (await handler(request({market:'US',date:'2026-10-16',useAI:true}))).json();
+  assert.equal(report.dataStatus,'partial'); assert.equal(report.aiStatus,'success'); assert.equal(report.reviewSections.length,3); assert.equal(aiCalls,1); assert(report.indices.every(i=>i.value==='확인 불가'));
+});
+await scenario('authored review and sector panels render with escaped content and safe links', async () => {
+  const ids=new Set([...html.matchAll(/id="([^"]+)"/g)].map(m=>m[1]));const elements=new Map();
+  const node=()=>({style:{},children:[],dataset:{},classList:{add(){},remove(){},toggle(){}},appendChild(c){this.children.push(c)},replaceChildren(){this.children=[]},setAttribute(){},addEventListener(){}});
+  const document={getElementById(id){assert(ids.has(id),id);if(!elements.has(id))elements.set(id,node());return elements.get(id)},querySelectorAll(){return []},createElement:node,addEventListener(){}};
+  const ctx=vm.createContext({window:{},document,Date,Intl,URL,setTimeout,clearTimeout,lucide:{createIcons(){}}});
+  vm.runInContext([...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)[1],ctx);
+  ctx.data={reviewSections:[{heading:'<b>시황</b>',text:'내용'}],watchpoints:['관찰점'],sectorPerformance:[{name:'기술',percent:-1,change:'-1%'}],crossAssets:[{name:'미국 10년물',value:'4.05%',change:'5.0bp'}]};
+  vm.runInContext('renderReview(data);renderMarketExtras(data)',ctx);
+  assert(elements.get('rendered-review-sections').innerHTML.includes('&lt;b&gt;'));assert(elements.get('rendered-cross-assets').innerHTML.includes('5.0bp'));
+  assert.equal(vm.runInContext("safeLink('javascript:alert(1)')",ctx),'#');
+  assert.equal(vm.runInContext("formatChangeValue('5.0bp')",ctx),'5.0bp');assert(html.includes('prefers-reduced-motion:reduce'));
 });

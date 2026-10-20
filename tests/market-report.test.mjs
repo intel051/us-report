@@ -4,12 +4,13 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 const apiSource = readFileSync(new URL('../api/gemini.js', import.meta.url), 'utf8');
 const libSource = readFileSync(new URL('../lib/market-data.js', import.meta.url), 'utf8');
+const contextSource = readFileSync(new URL('../lib/report-context.js', import.meta.url), 'utf8');
 const universeSource = readFileSync(new URL('../lib/stock-universe.js', import.meta.url), 'utf8');
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const dataUrl = source => 'data:text/javascript;base64,' + Buffer.from(source).toString('base64');
 async function fresh() {
   const libUrl = dataUrl(libSource.replace("'./stock-universe.js'", JSON.stringify(dataUrl(universeSource))) + '\n//' + Math.random());
-  const api = await import(dataUrl(apiSource.replace("'../lib/market-data.js'", JSON.stringify(libUrl)) + '\n//' + Math.random()));
+  const api = await import(dataUrl(apiSource.replace("'../lib/market-data.js'", JSON.stringify(libUrl)).replace("'../lib/report-context.js'", JSON.stringify(dataUrl(contextSource))) + '\n//' + Math.random()));
   return { handler: api.default, lib: await import(libUrl) };
 }
 const request = (payload = { market: 'US', date: '2026-10-16' }, type = 'report') => new Request('https://test/api/gemini', { method: 'POST', body: JSON.stringify({ type, payload }) });
@@ -42,7 +43,7 @@ await scenario('missing API key leaves default and optional report usable', asyn
 await scenario('successful AI only replaces prose; payload has no search tool and tiny schema', async ({ handler }) => {
   const report = await (await handler(request({ market: 'US', date: '2026-10-16', useAI: true }))).json();
   assert.equal(report.analysisMode, 'ai'); assert.equal(report.indices[0].value, '110'); assert.equal(aiCalls, 1);
-  assert(!lastPayload.tools); assert.equal(lastPayload.generationConfig.thinkingConfig.thinkingBudget, 0);
+  assert(!lastPayload.tools); assert.equal(lastPayload.generationConfig.thinkingConfig.thinkingLevel, 'minimal');
   assert.equal(lastPayload.generationConfig.maxOutputTokens, 2048);
   assert.deepEqual(Object.keys(lastPayload.generationConfig.responseJsonSchema.properties), ['title', 'summary', 'sections', 'watchpoints']);
   const compact = JSON.parse(lastPayload.contents[0].parts[0].text);
@@ -107,7 +108,7 @@ await scenario('frontend scripts parse, default excludes AI, no fabricated stock
   const ctx = vm.createContext({ window: {}, document: { addEventListener() {} }, Date, Intl, setTimeout, clearTimeout, console });
   vm.runInContext(scripts.at(-1), ctx);
   assert.equal(vm.runInContext("escapeHtml('<img>')", ctx), '&lt;img&gt;'); assert.equal(vm.runInContext("formatChangeValue('확인 불가')", ctx), '확인 불가');
-  assert(html.includes('useAI: true')); assert(!html.includes('Math.random()')); assert(!html.includes('callGeminiAPI'));
+  assert(!html.includes('Math.random()')); assert(!html.includes('callGeminiAPI'));
 });
 await scenario('report UI renders baseline, source links and explicit empty-data states', async () => {
   const ids = new Set([...html.matchAll(/id="([^"]+)"/g)].map(m => m[1]));
@@ -197,4 +198,38 @@ await scenario('authored review and sector panels render with escaped content an
   assert(elements.get('rendered-review-sections').innerHTML.includes('&lt;b&gt;'));assert(elements.get('rendered-cross-assets').innerHTML.includes('5.0bp'));
   assert.equal(vm.runInContext("safeLink('javascript:alert(1)')",ctx),'#');
   assert.equal(vm.runInContext("formatChangeValue('5.0bp')",ctx),'5.0bp');assert(html.includes('prefers-reduced-motion:reduce'));
+});
+await scenario('signed snapshots let a fresh writer instance skip all public feed requests', async ({handler}) => {
+  const report = await (await handler(request())).json();assert(report.analysisContext?.signature); const previous=publicCalls;
+  const other=await fresh();
+  const result=await (await other.handler(request({context:report.analysisContext},'write_report'))).json();
+  assert.equal(result.aiStatus,'success');assert.equal(result.reviewSections.length,3);assert.equal(result.aiDiagnostic.model,'gemini-3.5-flash-lite');assert.equal(publicCalls,previous);assert.equal(aiCalls,1);assert(!Object.hasOwn(result,'dataStatus'));
+});
+await scenario('tampered or expired report contexts are rejected before calling Gemini', async ({handler}) => {
+  const report=await(await handler(request())).json(); const original=report.analysisContext;
+  for(const context of [{...original,payload:original.payload+' '},{...original,expiresAt:Date.now()-1},null]){
+    const result=await(await handler(request({context},'write_report'))).json();assert.equal(result.aiDiagnostic.code,'REPORT_CONTEXT_INVALID');
+  }assert.equal(aiCalls,0);
+});
+await scenario('Google 404 is retained and credentials are redacted from response and logs', async ({handler}) => {
+  const records=[];const warn=console.warn;console.warn=record=>records.push(record);
+  try{
+    aiResponder=()=>Response.json({error:{message:'Model not available test-secret AIzaABC123_private projects/123456',code:404}},{status:404});
+    const result=await(await handler(request({market:'US',date:'2026-10-16',useAI:true}))).json();
+    assert.equal(result.aiDiagnostic.code,'MODEL_NOT_FOUND');assert.equal(result.aiDiagnostic.upstreamStatus,404);assert(result.aiMessage.includes('Model not available'));assert(result.aiDiagnostic.requestId);
+    assert(!JSON.stringify(result.aiDiagnostic).includes('test-secret'));assert(!records.join('').includes('AIzaABC123'));assert(!records.join('').includes('projects/123456'));
+  }finally{console.warn=warn;}
+});
+await scenario('missing production key is explicit and does not trigger model calls', async ({handler}) => {
+  delete process.env.GEMINI_API_KEY;
+  const result=await(await handler(request({context:null},'write_report'))).json();
+  assert.equal(result.aiDiagnostic.code,'API_KEY_MISSING');assert.equal(result.aiDiagnostic.attempted,false);assert.equal(aiCalls,0);
+});
+await scenario('legacy Flash-Lite setting migrates to the provider-recommended supported model', async ({handler}) => {
+  process.env.GEMINI_SUMMARY_MODEL='gemini-2.5-flash-lite';
+  const result=await(await handler(request({market:'US',date:'2026-10-16',useAI:true}))).json();assert.equal(result.aiModel,'gemini-3.5-flash-lite');
+});
+await scenario('minor length overruns do not throw away a complete generated review', async ({handler}) => {
+  aiResponder=()=>Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify({title:'제목',summary:'요약'.repeat(180),sections:[1,2,3].map(n=>({heading:'회고',text:'내용'.repeat(220)})),watchpoints:['관찰점']})}]}}]});
+  const result=await(await handler(request({market:'US',date:'2026-10-16',useAI:true}))).json();assert.equal(result.aiStatus,'success');assert.equal(result.reviewSections.length,3);
 });

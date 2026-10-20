@@ -1,4 +1,5 @@
 export const config = { runtime: 'edge' };
+import { sealContext, openContext } from '../lib/report-context.js';
 import { MARKETS, collectReport, searchStocks, stockDetail, memo, dayIn } from '../lib/market-data.js';
 
 const json = (data, status = 200, extra = {}) => new Response(JSON.stringify(data), {
@@ -13,6 +14,7 @@ function text(value, max, label) {
 }
 function normalize(type, input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new ApiError('잘못된 요청 형식입니다.');
+  if (type === 'write_report') return { context: input.context || null };
   if (type === 'search_stock') return { query: text(input.query, 100, '검색어') };
   if (type === 'stock') {
     const date = input.date;
@@ -88,7 +90,7 @@ async function generateInterpretation(compact, model, apiKey, timeoutMs) {
   try {
     const generationConfig = { responseMimeType: 'application/json', responseJsonSchema: AI_SCHEMA, maxOutputTokens: 2048 };
     if (/^gemini-2\.5-(?:flash|flash-lite)$/.test(model)) generationConfig.thinkingConfig = { thinkingBudget: 0 };
-    else if (/^gemini-3/.test(model)) generationConfig.thinkingConfig = { thinkingLevel: 'low' };
+    else if (/^gemini-3/.test(model)) generationConfig.thinkingConfig = { thinkingLevel: /flash-lite/.test(model) ? 'minimal' : 'low' };
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey }, signal: controller.signal,
       body: JSON.stringify({
@@ -131,8 +133,8 @@ async function generateInterpretation(compact, model, apiKey, timeoutMs) {
   } finally { clearTimeout(timer); }
 }
 
-async function addInterpretation(report, timeoutMs = 12000) {
-  const model = process.env.GEMINI_SUMMARY_MODEL || 'gemini-2.5-flash-lite';
+async function addInterpretation(report, timeoutMs = 20000, suppliedCompact = null) {
+  const model = (process.env.GEMINI_SUMMARY_MODEL === 'gemini-2.5-flash-lite' ? 'gemini-3.5-flash-lite' : process.env.GEMINI_SUMMARY_MODEL) || 'gemini-3.5-flash-lite';
   const skip = (status, code, message) => { const result = skipped(code, message, model, { status }); return basic(report, status, message, undefined, result.diagnostic); };
   if (report.dataStatus === 'unavailable') return skip('no_data', 'NO_SOURCE_DATA', '시세 자료가 부족해 AI 호출을 생략했습니다.');
   const apiKey = process.env.GEMINI_API_KEY;
@@ -140,16 +142,16 @@ async function addInterpretation(report, timeoutMs = 12000) {
   if (process.env.GEMINI_SUMMARY_ENABLED === 'false') return skip('disabled', 'AI_DISABLED', 'GEMINI_SUMMARY_ENABLED=false로 설정되어 마감시황 작성을 건너뛰었습니다.');
   // A separate setting prevents the old, costly GEMINI_MODEL value from overriding the cheap default.
   if (!/^gemini-[\w.-]{1,80}$/.test(model)) return skip('not_configured', 'INVALID_MODEL_SETTING', 'GEMINI_SUMMARY_MODEL 설정을 확인해 주세요.');
-  const compact = compactReport(report);
+  const compact = suppliedCompact || compactReport(report);
   const key = JSON.stringify([model, compact]);
   let value = aiCache.get(key);
   let result = value?.expires > Date.now() ? value.result : null;
   const cacheHit = Boolean(result);
   if (!result) {
-    if (retryAt > Date.now()) return basic(report, 'quota', 'AI 사용 한도 초과로 기본 요약을 표시합니다. 숫자와 뉴스는 그대로 이용할 수 있습니다.', Math.ceil((retryAt - Date.now()) / 1000));
+    if (retryAt > Date.now()) { const diagnostic = skipped('QUOTA_COOLDOWN', 'AI 사용 한도 초과 후 대기 중입니다. 수집 자료는 계속 이용할 수 있습니다.', model).diagnostic; return basic(report, 'quota', diagnostic.message, Math.ceil((retryAt - Date.now()) / 1000), diagnostic); }
     let job = aiPending.get(key);
     if (!job) {
-      if (aiPending.size >= 5) return basic(report, 'busy', 'AI 요청 대기 중입니다. 기본 요약을 먼저 표시합니다.');
+      if (aiPending.size >= 5) return skip('busy', 'AI_BUSY', 'AI 요청이 많아 수집 자료를 먼저 표시합니다.');
       job = generateInterpretation(compact, model, apiKey, timeoutMs).then(result => {
         if (aiCache.size >= 100) aiCache.delete(aiCache.keys().next().value);
         // Briefly cache all failures too; repeated clicks must not repeatedly call a failing model.
@@ -169,10 +171,24 @@ export default async function handler(req) {
   try {
     const started = Date.now();
     const raw = await req.text();
-    if (new TextEncoder().encode(raw).length > 8192) throw new ApiError('요청이 너무 큽니다.', 413);
+    if (new TextEncoder().encode(raw).length > 32768) throw new ApiError('요청이 너무 큽니다.', 413);
     let body;
     try { body = JSON.parse(raw); } catch { throw new ApiError('올바른 JSON 요청이 필요합니다.'); }
     const type = body?.type, input = normalize(type, body?.payload);
+    if (type === 'write_report') {
+      // The report snapshot is signed by the server; never trust arbitrary client-supplied prices.
+      const model = (process.env.GEMINI_SUMMARY_MODEL === 'gemini-2.5-flash-lite' ? 'gemini-3.5-flash-lite' : process.env.GEMINI_SUMMARY_MODEL) || 'gemini-3.5-flash-lite';
+      if (!process.env.GEMINI_API_KEY) { const result = await addInterpretation({dataStatus:'partial'}); delete result.dataStatus; return json(result); }
+      const compact = await openContext(input.context, process.env.GEMINI_API_KEY);
+      if (!compact) {
+        const diagnostic = skipped('REPORT_CONTEXT_INVALID', '자료 확인 정보가 만료되었거나 현재 배포와 일치하지 않습니다. 이날의 장 돌아보기를 다시 눌러 주세요.', model).diagnostic;
+        return json(basic({}, 'invalid_context', diagnostic.message, undefined, diagnostic));
+      }
+      const dataStatus = compact.indices.some(row => row[1] !== '확인 불가') || compact.headlines.length || compact.stocks?.length ? 'partial' : 'unavailable';
+      const result = await addInterpretation({dataStatus}, 20000, compact);
+      delete result.dataStatus;
+      return json(result);
+    }
     if (type === 'search_stock') {
       const result = await searchStocks(input.query);
       if (result == null) throw new ApiError('공개 종목검색 공급자가 응답하지 않습니다. 잠시 후 다시 시도해 주세요.', 503);
@@ -186,7 +202,9 @@ export default async function handler(req) {
     const report = await memo(`report:${input.market}:${input.date}`, 5 * 60000, () => collectReport(input.market, input.date));
     // The default path never needs an API key or makes any Gemini call.
     const remaining = Math.max(1000, Math.min(12000, 22000 - (Date.now() - started)));
-    return json(input.useAI ? await addInterpretation(report, remaining) : report);
+    if (input.useAI) return json(await addInterpretation(report, remaining));
+    const analysisContext = await sealContext(compactReport(report), process.env.GEMINI_API_KEY);
+    return json({ ...report, analysisContext });
   } catch (err) {
     return json({ error: err instanceof ApiError ? err.message : '공개 데이터를 수집하지 못했습니다. 잠시 후 다시 시도해 주세요.' }, err instanceof ApiError ? err.status : 503);
   }

@@ -507,7 +507,7 @@
 
     async function callMarketAPI(endpointType, payloadData) {
       const basicReport = endpointType === 'report' && payloadData.useAI !== true;
-      const cacheKey = basicReport ? `market-v4:${payloadData.market}:${payloadData.date}` : null;
+      const cacheKey = basicReport ? `market-v5:${payloadData.market}:${payloadData.date}` : null;
       if (cacheKey) {
         try { const hit = JSON.parse(sessionStorage.getItem(cacheKey)); if (hit && hit.expires > Date.now() && Array.isArray(hit.data?.indices)) return hit.data; } catch {}
       }
@@ -608,7 +608,8 @@
       button.classList.add('writer-pending');
       document.getElementById('generate-report-button').disabled = true;
       try {
-        const result = await callMarketAPI('report', { market: snapshot.market || state.activeMarket, date: snapshot.date, useAI: true });
+        const written = await callMarketAPI('write_report', { context: snapshot.analysisContext || null });
+        const result = { ...snapshot, ...written };
         state.reportData = result;
         renderReport();
         showToast(result.aiStatus === 'success' ? '하루의 마감시황을 작성했습니다.' : result.aiMessage, result.aiStatus === 'success');

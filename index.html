@@ -250,6 +250,7 @@
           </div>
 
           <p class="text-xs text-slate-500">시세·뉴스는 공개 자료에서 수집하고, Gemini는 마감시황 작성에만 사용합니다.</p>
+          <div id="ai-status-banner" class="hidden rounded-2xl border border-blue-100 bg-blue-50 p-4 text-xs text-slate-600 leading-relaxed break-words" role="status" aria-live="polite"></div>
           <div id="report-canvas-area" class="bg-white rounded-3xl border border-tossBorder p-6 sm:p-8 md:p-10 shadow-sm space-y-8 sm:space-y-10">
             <details id="report-data-notice"></details>
             <div class="flex flex-col md:flex-row md:items-center justify-between pb-6 border-b border-tossBorder gap-4">
@@ -656,6 +657,25 @@
       const color = status === 'unknown' ? '#b0b8c1' : status === 'down' ? (market === 'US' ? '#f17179' : '#6f9ff2') : (market === 'US' ? '#62b99e' : '#f17179');
       return `<svg class="sparkline" viewBox="0 0 240 50" role="img" aria-label="선택일 이전 유효 거래일 종가 흐름"><line x1="0" y1="48" x2="240" y2="48" stroke="#edf0f3"/><polyline fill="none" stroke="${color}" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" points="${points}"/></svg>`;
     }
+    function renderAIStatus(data) {
+      const box = document.getElementById('ai-status-banner');
+      const failed = !['success', 'not_requested'].includes(data.aiStatus || 'not_requested');
+      box.classList.toggle('hidden', !failed);
+      box.replaceChildren();
+      if (!failed) return;
+      const title = document.createElement('strong');
+      title.textContent = 'Gemini 시황이 작성되지 않았습니다 · 수집 자료는 그대로 표시합니다';
+      box.appendChild(title);
+      const message = document.createElement('p');
+      message.textContent = data.aiMessage || '응답을 확인하지 못했습니다.';
+      box.appendChild(message);
+      const d = data.aiDiagnostic;
+      if (d) {
+        const detail = document.createElement('p');
+        detail.textContent = [d.code, d.upstreamStatus ? `Google HTTP ${d.upstreamStatus}` : '', d.model, `진단 ID: ${d.requestId}`].filter(Boolean).join(' · ');
+        box.appendChild(detail);
+      }
+    }
     function renderReview(data) {
       const sections = data.reviewSections || [];
       document.getElementById('daily-review-section').classList.toggle('hidden', !sections.length);
@@ -784,6 +804,7 @@
       if (!data.sectors?.length) document.getElementById('rendered-sectors').textContent = '섹터 자료 미수집';
       if (!data.stocks?.length) document.getElementById('rendered-stocks-container').textContent = '해당 날짜 기사에서 종목을 확인하지 못했어요. 날짜를 바꾸거나 종목 검색으로 시세를 확인해 주세요.';
       if (!data.news?.length) document.getElementById('rendered-news-container').textContent = '선택한 날짜의 관련 기사를 확보하지 못했습니다.';
+      renderAIStatus(data);
       renderReview(data);
       renderMarketExtras(data);
       renderSources(data);

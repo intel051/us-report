@@ -11,7 +11,7 @@ const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const dataUrl = source => 'data:text/javascript;base64,' + Buffer.from(source).toString('base64');
 async function fresh() {
   const libUrl = dataUrl(libSource.replace("'./stock-universe.js'", JSON.stringify(dataUrl(universeSource))) + '\n//' + Math.random());
-  const api = await import(dataUrl(apiSource.replace("'../lib/company-data.js'", JSON.stringify(dataUrl(companySource.replace("'./market-data.js'", JSON.stringify(libUrl))))).replace("'../lib/market-data.js'", JSON.stringify(libUrl)).replace("'../lib/report-context.js'", JSON.stringify(dataUrl(contextSource))) + '\n//' + Math.random()));
+  const api = await import(dataUrl(apiSource.replace("'../lib/company-data.js'", JSON.stringify(dataUrl(companySource.replace("'./sec-snapshot.js'",JSON.stringify(dataUrl('export const SEC_SNAPSHOT = {};'))).replace("'./market-data.js'", JSON.stringify(libUrl))))).replace("'../lib/market-data.js'", JSON.stringify(libUrl)).replace("'../lib/report-context.js'", JSON.stringify(dataUrl(contextSource))) + '\n//' + Math.random()));
   return { handler: api.default, lib: await import(libUrl) };
 }
 const request = (payload = { market: 'US', date: '2026-10-16' }, type = 'report') => new Request('https://test/api/gemini', { method: 'POST', body: JSON.stringify({ type, payload }) });
@@ -259,7 +259,7 @@ await scenario('stock prose uses signed company facts, cache and same-day news w
 });
 await scenario('company facts reject future restatements, YTD EPS and negative-base growth', async () => {
   const libUrl = dataUrl(libSource.replace("'./stock-universe.js'", JSON.stringify(dataUrl(universeSource))));
-  const {extractEarnings,businessExcerpt} = await import(dataUrl(companySource.replace("'./market-data.js'",JSON.stringify(libUrl))));
+  const {extractEarnings,businessExcerpt} = await import(dataUrl(companySource.replace("'./sec-snapshot.js'",JSON.stringify(dataUrl('export const SEC_SNAPSHOT = {};'))).replace("'./market-data.js'",JSON.stringify(libUrl))));
   const row = (val,start,end,filed) => ({val,start,end,filed,form:'10-Q',accn:'0000000001-26-000001'});
   const data = {facts:{'us-gaap':{Revenues:{units:{USD:[row(120,'2026-04-01','2026-06-30','2026-08-01'),row(999,'2026-04-01','2026-06-30','2026-11-01')]}},EarningsPerShareDiluted:{units:{'USD/shares':[row(1,'2026-01-01','2026-06-30','2026-08-01'),row(2,'2026-04-01','2026-06-30','2026-08-01'),row(-1,'2025-04-01','2025-06-30','2025-08-01')]}}}}};
   const financials = extractEarnings(data,'2026-10-16',1);
@@ -292,4 +292,19 @@ await scenario('stock modal renders selected-date facts before AI, retaining the
   assert(elements.get('modal-financial-facts').children[1].innerHTML.includes('확인 불가'));
   assert(elements.get('modal-ai-status').innerText.includes('한도 대기'));
   assert.equal(elements.get('modal-company-info').innerText,'공시 원문');
+});
+await scenario('SEC-blocked hosts use dated snapshots without leaking future filings or business sections', async () => {
+  const libUrl = dataUrl(libSource.replace("'./stock-universe.js'",JSON.stringify(dataUrl(universeSource))));
+  const row = (val,filed) => ({start:'2026-04-01',end:'2026-06-30',val,filed,form:'10-Q',accn:'0000320193-26-000001'});
+  const saved = {AAPL:{cik:320193,retrievedAt:'2026-10-22',facts:{facts:{'us-gaap':{Revenues:{units:{USD:[row(1000,'2026-07-25'),row(9999,'2026-11-01')]}}}}},business:{excerpt:'Verified business section',filed:'2026-09-01',url:'https://www.sec.gov/Archives/edgar/data/320193/filing/'}}};
+  const {companyData,businessExcerpt} = await import(dataUrl(companySource.replace("'./sec-snapshot.js'",JSON.stringify(dataUrl('export const SEC_SNAPSHOT = '+JSON.stringify(saved)))).replace("'./market-data.js'",JSON.stringify(libUrl))));
+  globalThis.fetch = async ()=>new Response('unavailable',{status:403});
+  const data = await companyData({ticker:'AAPL',name:'Apple',date:'2026-10-16',market:'US'});
+  assert.equal(data.earnings.revenue.value,1000); assert(data.earnings.basis.includes('2026-10-22'));
+  assert.equal(data.business.retrievedAt,'2026-10-22');
+  const earlier = await companyData({ticker:'AAPL',name:'Apple',date:'2026-08-01',market:'US'});
+  assert.equal(earlier.business,null); assert.equal(earlier.earnings.revenue.value,1000);
+  const before = await companyData({ticker:'AAPL',name:'Apple',date:'2026-07-01',market:'US'});
+  assert.equal(before.earnings,null);
+  assert(businessExcerpt('<p>ITEM 1. <span>B</span><span>USINESS</span></p>'+('Our business sells devices. '.repeat(70))+'<p>ITEM 1A. <span>RIS</span><span>K</span> FACTORS</p>').startsWith('Our business'));
 });

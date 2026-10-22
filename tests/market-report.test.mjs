@@ -4,13 +4,14 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 const apiSource = readFileSync(new URL('../api/gemini.js', import.meta.url), 'utf8');
 const libSource = readFileSync(new URL('../lib/market-data.js', import.meta.url), 'utf8');
+const companySource = readFileSync(new URL('../lib/company-data.js', import.meta.url), 'utf8');
 const contextSource = readFileSync(new URL('../lib/report-context.js', import.meta.url), 'utf8');
 const universeSource = readFileSync(new URL('../lib/stock-universe.js', import.meta.url), 'utf8');
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const dataUrl = source => 'data:text/javascript;base64,' + Buffer.from(source).toString('base64');
 async function fresh() {
   const libUrl = dataUrl(libSource.replace("'./stock-universe.js'", JSON.stringify(dataUrl(universeSource))) + '\n//' + Math.random());
-  const api = await import(dataUrl(apiSource.replace("'../lib/market-data.js'", JSON.stringify(libUrl)).replace("'../lib/report-context.js'", JSON.stringify(dataUrl(contextSource))) + '\n//' + Math.random()));
+  const api = await import(dataUrl(apiSource.replace("'../lib/company-data.js'", JSON.stringify(dataUrl(companySource.replace("'./market-data.js'", JSON.stringify(libUrl))))).replace("'../lib/market-data.js'", JSON.stringify(libUrl)).replace("'../lib/report-context.js'", JSON.stringify(dataUrl(contextSource))) + '\n//' + Math.random()));
   return { handler: api.default, lib: await import(libUrl) };
 }
 const request = (payload = { market: 'US', date: '2026-10-16' }, type = 'report') => new Request('https://test/api/gemini', { method: 'POST', body: JSON.stringify({ type, payload }) });
@@ -232,4 +233,63 @@ await scenario('legacy Flash-Lite setting migrates to the provider-recommended s
 await scenario('minor length overruns do not throw away a complete generated review', async ({handler}) => {
   aiResponder=()=>Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify({title:'제목',summary:'요약'.repeat(180),sections:[1,2,3].map(n=>({heading:'회고',text:'내용'.repeat(220)})),watchpoints:['관찰점']})}]}}]});
   const result=await(await handler(request({market:'US',date:'2026-10-16',useAI:true}))).json();assert.equal(result.aiStatus,'success');assert.equal(result.reviewSections.length,3);
+});
+
+await scenario('stock prose uses signed company facts, cache and same-day news without another public fetch', async ({handler}) => {
+  const previous = feedResponder;
+  const fact = (val,filed,start='2026-04-01',end='2026-06-30') => ({val,filed,start,end,form:'10-Q',accn:'0000320193-26-000001'});
+  feedResponder = url => url.includes('companyfacts') ? Response.json({facts:{'us-gaap':{
+    RevenueFromContractWithCustomerExcludingAssessedTax:{units:{USD:[fact(1000,'2026-07-25'),fact(800,'2025-07-25','2025-04-01','2025-06-30'),fact(999999,'2026-11-01','2026-07-01','2026-09-30')]}},
+    EarningsPerShareDiluted:{units:{'USD/shares':[fact(2,'2026-07-25'),fact(1,'2025-07-25','2025-04-01','2025-06-30')]}}
+  }}}) : url.includes('/submissions/') ? Response.json({filings:{recent:{form:[]}}}) : url.includes('/rss/') ? new Response('<rss>'+item('Apple AAPL shares rise')+item('Apple future result','Mon, 19 Oct 2026 21:00:00 GMT')+'</rss>') : previous(url);
+  const detail = await (await handler(request({name:'Apple',ticker:'AAPL',market:'US',date:'2026-10-16'},'stock'))).json();
+  assert.equal(detail.financials.revenue.value,1000); assert.equal(detail.financials.revenue.yoy,25);
+  assert.equal(detail.financials.eps.value,2); assert.equal(detail.companyNews.length,1); assert.equal(aiCalls,0);
+  assert(detail.analysisContext); const calls = publicCalls;
+  aiResponder = () => Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify({title:'Apple',summary:'기업 개요 원문 미확인',sections:[{heading:'당일',text:'당일 주가 상승.'},{heading:'실적',text:'공시 매출과 EPS 확인.'},{heading:'관찰',text:'추가 공시 확인.'}],watchpoints:['수익성 확인']})}]}}]});
+  const a = await (await handler(request({context:detail.analysisContext},'write_stock'))).json();
+  assert.equal(a.aiStatus,'success'); assert.equal(a.info,'기업 개요 원문 미확인'); assert.equal(publicCalls,calls);
+  assert(lastPayload.systemInstruction.parts[0].text.includes('기업 복기'));
+  assert.equal(JSON.parse(lastPayload.contents[0].parts[0].text).earnings.revenue.value,1000);
+  await handler(request({context:detail.analysisContext},'write_stock')); assert.equal(aiCalls,1);
+  const wrongKind = await (await handler(request({context:detail.analysisContext},'write_report'))).json();
+  assert.equal(wrongKind.aiStatus,'invalid_context'); assert.equal(aiCalls,1);
+  const tampered = {...detail.analysisContext,payload:detail.analysisContext.payload.replace('1000','9999')};
+  assert.equal((await (await handler(request({context:tampered},'write_stock'))).json()).aiStatus,'invalid_context');
+});
+await scenario('company facts reject future restatements, YTD EPS and negative-base growth', async () => {
+  const libUrl = dataUrl(libSource.replace("'./stock-universe.js'", JSON.stringify(dataUrl(universeSource))));
+  const {extractEarnings,businessExcerpt} = await import(dataUrl(companySource.replace("'./market-data.js'",JSON.stringify(libUrl))));
+  const row = (val,start,end,filed) => ({val,start,end,filed,form:'10-Q',accn:'0000000001-26-000001'});
+  const data = {facts:{'us-gaap':{Revenues:{units:{USD:[row(120,'2026-04-01','2026-06-30','2026-08-01'),row(999,'2026-04-01','2026-06-30','2026-11-01')]}},EarningsPerShareDiluted:{units:{'USD/shares':[row(1,'2026-01-01','2026-06-30','2026-08-01'),row(2,'2026-04-01','2026-06-30','2026-08-01'),row(-1,'2025-04-01','2025-06-30','2025-08-01')]}}}}};
+  const financials = extractEarnings(data,'2026-10-16',1);
+  assert.equal(financials.revenue.value,120); assert.equal(financials.eps.value,2); assert.equal(financials.eps.yoy,null);
+  assert.equal(financials.guidance,null); assert.equal(extractEarnings(data,'2025-07-01',1),null);
+  assert.equal(businessExcerpt('<p>ITEM 1. BUSINESS 2 ITEM 1A. RISK</p>'),'');
+  const excerpt = businessExcerpt('<p>ITEM 1. BUSINESS</p><p>'+ 'Our business sells devices. '.repeat(70) +'</p><p>ITEM 1A. RISK FACTORS</p>');
+  assert(excerpt.startsWith('Our business')); assert(excerpt.length <= 2200);
+});
+await scenario('stock quota retains financial facts and suppresses subsequent company AI calls', async ({handler}) => {
+  const detail = await (await handler(request({name:'Apple',ticker:'AAPL',date:'2026-10-16',market:'US'},'stock'))).json();
+  aiResponder = () => Response.json({error:{message:'quota'}},{status:429});
+  assert.equal((await (await handler(request({context:detail.analysisContext},'write_stock'))).json()).aiStatus,'quota');
+  await handler(request({context:detail.analysisContext},'write_stock')); assert.equal(aiCalls,1);
+  assert.deepEqual(detail.closeHistory,[100,110]);
+});
+await scenario('stock modal renders selected-date facts before AI, retaining them on quota', async () => {
+  const ids = new Set([...html.matchAll(/id="([^"]+)"/g)].map(m=>m[1]));
+  const elements = new Map();
+  const node = () => ({children:[],style:{},classList:{add(){},remove(){},toggle(){}},replaceChildren(){this.children=[];},appendChild(child){this.children.push(child);},setAttribute(){}});
+  const document = {getElementById(id){assert(ids.has(id),`missing DOM id ${id}`);if(!elements.has(id))elements.set(id,node());return elements.get(id);},createElement:node,addEventListener(){}};
+  const ctx = vm.createContext({window:{},document,Date,Intl,setTimeout,clearTimeout,console,URL});
+  vm.runInContext([...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)[1],ctx);
+  ctx.detail = {date:'2026-10-16',ticker:'AAPL',info:'공시 원문',trend:'up',earnings:['종가 110 USD'],closeHistory:[100,110],sources:[],analysisContext:{payload:'signed'},companyNews:[{source:'Reuters',title:'Apple rises'}],financials:{start:'2026-04-01',end:'2026-06-30',period:'분기',basis:'SEC GAAP',revenue:{value:1000,unit:'USD',filed:'2026-07-25',yoy:25},eps:null}};
+  ctx.calls=[];
+  vm.runInContext("state.selectedDate='2026-10-16';state.activeMarket='US';callMarketAPI=async(type,payload)=>{calls.push({type,payload});return type==='stock'?detail:{aiStatus:'quota',aiMessage:'한도 대기'};}",ctx);
+  await vm.runInContext("loadStockDetail('Apple','AAPL')",ctx);
+  assert.equal(ctx.calls[0].payload.date,'2026-10-16'); assert.equal(ctx.calls[1].type,'write_stock');
+  assert(elements.get('modal-financial-facts').children[0].innerHTML.includes('1,000 USD'));
+  assert(elements.get('modal-financial-facts').children[1].innerHTML.includes('확인 불가'));
+  assert(elements.get('modal-ai-status').innerText.includes('한도 대기'));
+  assert.equal(elements.get('modal-company-info').innerText,'공시 원문');
 });

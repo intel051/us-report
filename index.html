@@ -388,13 +388,13 @@
       <div class="p-6 sm:p-8 overflow-y-auto scrollbar-hide">
         <div id="modal-loading" class="flex flex-col items-center justify-center py-12 sm:py-16 space-y-5">
           <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-4 border-tossBlue border-t-transparent animate-spin"></div>
-          <p class="text-sm sm:text-base font-bold text-slate-500 text-center leading-relaxed break-keep mt-5">공개 종목 시세를 불러오는 중입니다...</p>
+          <p class="text-sm sm:text-base font-bold text-slate-500 text-center leading-relaxed break-keep mt-5">선택일 시세와 공개 공시를 확인하고 있습니다...</p>
         </div>
 
         <div id="modal-data" class="hidden space-y-6 sm:space-y-8">
           <div class="bg-slate-50 rounded-2xl p-5 sm:p-7 border border-slate-100 flex items-center justify-between">
             <div>
-              <span class="text-xs sm:text-sm font-bold text-tossTextGray">최근 주가 방향</span>
+              <span class="text-xs sm:text-sm font-bold text-tossTextGray">선택일 주가 방향</span>
               <p id="modal-trend-text" class="text-base sm:text-lg font-bold mt-1.5 text-slate-800 break-keep"></p>
             </div>
             <div class="h-10 sm:h-12 w-24 sm:w-28 flex items-end justify-between space-x-1 opacity-80" id="modal-sparkline"></div>
@@ -404,10 +404,29 @@
             <p id="modal-company-info" class="text-sm sm:text-base text-slate-700 leading-relaxed sm:leading-loose bg-white break-keep"></p>
           </div>
           <div>
-            <h4 class="text-sm sm:text-base font-bold text-tossBlue mb-3 sm:mb-4 flex items-center"><i data-lucide="file-bar-chart" class="w-4 h-4 sm:w-5 sm:h-5 mr-1.5"></i>최근 시세 및 확인 사항</h4>
-            <div id="modal-sources" class="text-xs text-slate-500"></div>
+            <h4 class="text-sm sm:text-base font-bold text-tossBlue mb-3 sm:mb-4 flex items-center"><i data-lucide="file-bar-chart" class="w-4 h-4 sm:w-5 sm:h-5 mr-1.5"></i>선택일 시세</h4>
+
             <ul id="modal-earnings-list" class="space-y-3 sm:space-y-4 text-sm sm:text-base text-slate-700 break-keep leading-relaxed"></ul>
           </div>
+          <section class="rounded-2xl bg-blue-50/50 p-5 border border-blue-100/60">
+            <h4 class="text-sm font-bold text-tossBlue mb-3">이날 주목한 이유</h4>
+            <p id="modal-day-review" class="text-sm text-slate-700 leading-relaxed break-keep"></p>
+          </section>
+          <section>
+            <h4 class="text-sm font-bold text-tossBlue mb-3">당시 공개된 최근 실적</h4>
+            <p id="modal-financial-period" class="text-xs text-slate-500 mb-3 leading-relaxed"></p>
+            <div id="modal-financial-facts" class="grid grid-cols-2 gap-3"></div>
+            <p id="modal-earnings-review" class="text-sm text-slate-700 leading-relaxed mt-3 break-keep"></p>
+          </section>
+          <section>
+            <h4 class="text-sm font-bold text-tossBlue mb-3">관찰할 점</h4>
+            <ul id="modal-watchpoints" class="text-sm text-slate-700 leading-relaxed space-y-2"></ul>
+          </section>
+          <p id="modal-ai-status" role="status" aria-live="polite" class="text-xs text-slate-500 leading-relaxed"></p>
+          <details class="border-t border-slate-100 pt-4">
+            <summary class="text-xs text-slate-500 cursor-pointer">자료 출처 보기</summary>
+            <div id="modal-sources" class="text-xs text-slate-500 mt-2"></div>
+          </details>
         </div>
       </div>
     </div>
@@ -932,21 +951,40 @@
       loadStockDetail(name, ticker, market, date);
     }
 
+    function renderCompanyFacts(detail) {
+      const financials = detail.financials;
+      document.getElementById('modal-day-review').innerText = (detail.companyNews || []).map(n=>`${n.source} · ${n.title}`).join('\n') || '선택일에 발행된 이 기업 관련 기사 제목을 확인하지 못했습니다. 주가 등락의 원인은 단정하지 않습니다.';
+      document.getElementById('modal-financial-period').innerText = financials ? `${financials.start} ~ ${financials.end} · ${financials.period} · ${financials.basis}` : '선택일까지 공개된 비교 가능한 실적을 확보하지 못했습니다. 현재 자동 공시 수집은 미국 SEC의 USD 기준 GAAP 매출·희석 EPS를 지원합니다.';
+      const box = document.getElementById('modal-financial-facts');
+      box.replaceChildren();
+      for (const [label, metric] of [['매출',financials?.revenue],['희석 EPS',financials?.eps]]) {
+        const card = document.createElement('div'); card.className = 'rounded-2xl bg-slate-50 p-4';
+        const formatted = metric ? `${new Intl.NumberFormat('en-US',{maximumFractionDigits:2}).format(metric.value)} ${metric.unit}` : '확인 불가';
+        const yoy = metric && Number.isFinite(metric.yoy) ? `전년 동기 대비 ${metric.yoy > 0 ? '+' : ''}${metric.yoy.toFixed(1)}%` : '전년 동기 증감률 미확인';
+        card.innerHTML = `<p class="text-xs text-slate-500">${label}</p><p class="text-sm font-bold text-slate-900 mt-1 break-all">${escapeHtml(formatted)}</p><p class="text-xs text-slate-500 mt-2">${escapeHtml(yoy)}</p>${metric ? `<p class="text-xs text-slate-400 mt-1">공시 ${escapeHtml(metric.filed)}</p>` : ''}`;
+        box.appendChild(card);
+      }
+      document.getElementById('modal-earnings-review').innerText = '가이던스와 시장 예상치는 검증된 자료가 없어 표시하지 않습니다. 공시일은 실적 발표일과 다를 수 있습니다.';
+      document.getElementById('modal-watchpoints').innerHTML = '<li>• 다음 공시의 매출과 수익성 변화</li><li>• 당일 기사에서 언급한 재료의 후속 공시</li>';
+      document.getElementById('modal-ai-status').innerText = detail.analysisContext ? '공개 자료 수집 완료' : 'AI 설정이 없어 공개 자료만 표시합니다.';
+    }
+
     async function loadStockDetail(name, ticker, market, date) {
       const requestId = ++stockRequestId;
       document.getElementById('modal-data').classList.add('hidden');
       document.getElementById('modal-loading').classList.remove('hidden');
-      document.getElementById('modal-loading').innerHTML = '<p class="text-sm text-slate-500">공개 시세를 불러오는 중...</p>';
+      document.getElementById('modal-loading').innerHTML = '<p class="text-sm text-slate-500">선택일 시세와 공개 공시를 확인하는 중...</p>';
 
       document.getElementById('modal-stock-name').innerText = name;
       document.getElementById('modal-stock-ticker').innerText = ticker || '분석 중...';
 
       try {
-        const reqData = { name: name, ticker: ticker, ...(date ? { date, market } : {}) };
+        const reqData = { name, ticker, date:date || state.selectedDate, market:market || state.activeMarket };
         const detail = await callMarketAPI('stock', reqData);
         if (requestId !== stockRequestId) return;
 
         document.getElementById('modal-company-info').innerText = detail.info;
+        renderCompanyFacts(detail);
         const sourceBox = document.getElementById('modal-sources');
         sourceBox.replaceChildren();
         for (const source of detail.sources || []) {
@@ -987,6 +1025,23 @@
 
         document.getElementById('modal-loading').classList.add('hidden');
         document.getElementById('modal-data').classList.remove('hidden');
+        if (detail.analysisContext) {
+          document.getElementById('modal-ai-status').innerText = 'Gemini가 공개 자료를 바탕으로 기업 해설을 작성하고 있습니다…';
+          try {
+            const writing = await callMarketAPI('write_stock', {context:detail.analysisContext});
+            if (requestId !== stockRequestId) return;
+            document.getElementById('modal-ai-status').innerText = writing.aiStatus === 'success' ? `Gemini 기업 해설 · ${writing.aiCacheHit ? '저장된 해설 재사용' : '공개 자료 기반'} · 기준일 ${detail.date}` : `공개 자료를 표시합니다 · ${writing.aiMessage || '기업 해설 작성 실패'}`;
+            if (writing.aiStatus === 'success') {
+              document.getElementById('modal-company-info').innerText = writing.info;
+              document.getElementById('modal-day-review').innerText = writing.dayReview;
+              document.getElementById('modal-earnings-review').innerText = writing.earningsReview;
+              document.getElementById('modal-watchpoints').innerHTML = writing.watchpoints.map(p=>`<li>• ${escapeHtml(p)}</li>`).join('');
+            }
+          } catch {
+            if (requestId !== stockRequestId) return;
+            document.getElementById('modal-ai-status').innerText = '기업 해설 연결이 지연되어 수집한 공개 자료를 유지합니다.';
+          }
+        }
 
       } catch (err) {
         if (requestId !== stockRequestId) return;

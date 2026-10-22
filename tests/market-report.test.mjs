@@ -241,8 +241,8 @@ await scenario('stock prose uses signed company facts, cache and same-day news w
   feedResponder = url => url.includes('companyfacts') ? Response.json({facts:{'us-gaap':{
     RevenueFromContractWithCustomerExcludingAssessedTax:{units:{USD:[fact(1000,'2026-07-25'),fact(800,'2025-07-25','2025-04-01','2025-06-30'),fact(999999,'2026-11-01','2026-07-01','2026-09-30')]}},
     EarningsPerShareDiluted:{units:{'USD/shares':[fact(2,'2026-07-25'),fact(1,'2025-07-25','2025-04-01','2025-06-30')]}}
-  }}}) : url.includes('/submissions/') ? Response.json({filings:{recent:{form:[]}}}) : url.includes('/rss/') ? new Response('<rss>'+item('Apple AAPL shares rise')+item('Apple future result','Mon, 19 Oct 2026 21:00:00 GMT')+'</rss>') : previous(url);
-  const detail = await (await handler(request({name:'Apple',ticker:'AAPL',market:'US',date:'2026-10-16'},'stock'))).json();
+  }}}) : url.includes('/submissions/') ? Response.json({filings:{recent:{form:[]}}}) : url.includes('/rss/') ? new Response('<rss>'+item('Apple shares rise')+item('Apple future result','Mon, 19 Oct 2026 21:00:00 GMT')+'</rss>') : previous(url);
+  const detail = await (await handler(request({name:'애플',ticker:'AAPL',market:'US',date:'2026-10-16'},'stock'))).json();
   assert.equal(detail.financials.revenue.value,1000); assert.equal(detail.financials.revenue.yoy,25);
   assert.equal(detail.financials.eps.value,2); assert.equal(detail.companyNews.length,1); assert.equal(aiCalls,0);
   assert(detail.analysisContext); const calls = publicCalls;

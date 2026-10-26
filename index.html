@@ -507,9 +507,9 @@
 
     async function callMarketAPI(endpointType, payloadData) {
       const basicReport = endpointType === 'report' && payloadData.useAI !== true;
-      const cacheKey = basicReport ? `market-v5:${payloadData.market}:${payloadData.date}` : null;
+      const cacheKey = basicReport ? `market-v6:${payloadData.market}:${payloadData.date}` : null;
       if (cacheKey) {
-        try { const hit = JSON.parse(sessionStorage.getItem(cacheKey)); if (hit && hit.expires > Date.now() && Array.isArray(hit.data?.indices)) return hit.data; } catch {}
+        try { const hit = JSON.parse(sessionStorage.getItem(cacheKey)); if (hit && hit.expires > Date.now() && Array.isArray(hit.data?.indices) && hit.data.indices.length && hit.data.indices.every(item => Number.isFinite(item.price) && Number.isFinite(item.percent))) return hit.data; } catch {}
       }
       const endpoint = '/api/gemini'; 
       const res = await fetch(endpoint, { 
@@ -529,8 +529,8 @@
          throw new Error(errMsg);
       }
       const data = await res.json();
-      if (cacheKey) {
-        try { sessionStorage.setItem(cacheKey, JSON.stringify({ data, expires: Date.now() + (data.dataStatus === 'unavailable' ? 30000 : 5 * 60000) })); } catch {}
+      if (cacheKey && data.indices?.length && data.indices.every(item => Number.isFinite(item.price) && Number.isFinite(item.percent))) {
+        try { sessionStorage.setItem(cacheKey, JSON.stringify({ data, expires: Date.now() + 5 * 60000 })); } catch {}
       }
       return data;
     }

@@ -331,3 +331,10 @@ await scenario('Korean and Japanese index fallbacks preserve date, previous clos
     assert.equal(await lib.dailyQuote(name,symbol,'2026-10-17',zone),null);
   }
 });
+await scenario('browser skips incomplete saved reports and does not cache new missing index values', async () => {
+  const cached={indices:[{name:'코스피',value:'확인 불가',status:'unknown'}]}; let fetches=0, writes=0;
+  const ctx=vm.createContext({window:{},document:{addEventListener(){}},Date,Intl,setTimeout,clearTimeout,console,sessionStorage:{getItem(){return JSON.stringify({expires:Date.now()+300000,data:cached});},setItem(){writes++;}},fetch:async()=>{fetches++;return Response.json(cached);}});
+  vm.runInContext([...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)[1],ctx);
+  await vm.runInContext("callMarketAPI('report',{market:'KR',date:'2026-10-26'})",ctx);
+  assert.equal(fetches,1);assert.equal(writes,0);
+});

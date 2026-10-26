@@ -217,7 +217,7 @@ export default async function handler(req) {
       const sources = [...result.sources, ...company.news.map(n=>({title:`${n.source} · ${n.title}`,url:n.url})), ...(company.business ? [{title:`SEC 10-K 기업 개요 · 공시 ${company.business.filed}${company.business.retrievedAt ? ' · 보조자료 수집 '+company.business.retrievedAt : ''}`,url:company.business.url}] : []), ...[company.earnings?.revenue,company.earnings?.eps].filter(Boolean).map(r=>({title:`SEC 실적 공시 · ${r.filed}`,url:r.url}))];
       return json({...result,date:input.date,financials:company.earnings,companyNews:company.news,info:company.business ? `${input.date} 기준 · 기업 개요 원문(SEC 공시 ${company.business.filed}): ${company.business.excerpt.slice(0,600)}…` : `${input.date} 기준 · 기업 개요 원문을 확보하지 못했습니다.`,sources,analysisContext:await sealContext(compact,process.env.GEMINI_API_KEY)});
     }
-    const report = await memo(`report:${input.market}:${input.date}`, 5 * 60000, () => collectReport(input.market, input.date));
+    const report = await memo(`report:${input.market}:${input.date}`, report => report.indices.some(item => !Number.isFinite(item.price) || !Number.isFinite(item.percent)) ? 15000 : 5 * 60000, () => collectReport(input.market, input.date));
     // The default path never needs an API key or makes any Gemini call.
     const remaining = Math.max(1000, Math.min(12000, 22000 - (Date.now() - started)));
     if (input.useAI) return json(await addInterpretation(report, remaining));

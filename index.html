@@ -8,7 +8,6 @@
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -22,24 +21,6 @@
   <style>
     body { font-family: Pretendard, sans-serif; background-color: #f9fafb; -webkit-font-smoothing: antialiased; word-break: keep-all; overflow-wrap: break-word; }
     
-    .capture-mode {
-      width: 1024px !important;
-      min-width: 1024px !important;
-      max-width: 1024px !important;
-      padding: 48px !important;
-      margin: 0 auto !important;
-      background: white !important;
-    }
-    .capture-mode .grid-cols-1.sm\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
-    .capture-mode .grid-cols-1.md\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-    .capture-mode .grid-cols-1.lg\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-    
-    .capture-mode h2, .capture-mode h3, .capture-mode h4, .capture-mode p, .capture-mode span {
-      white-space: pre-wrap !important;
-      word-break: break-word !important;
-      overflow-wrap: break-word !important;
-    }
-
     .scrollbar-hide::-webkit-scrollbar { display: none; }
     .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
     .modal-enter { opacity: 0; transform: scale(0.95) translateY(10px); }
@@ -1061,31 +1042,95 @@
       }
     });
 
-    function exportReportAsImage() {
-      const el = document.getElementById('report-canvas-area');
-      showToast('이미지 렌더링 중...');
-      
-      const targetWidth = 1024; 
-      el.classList.add('capture-mode');
+    // Draw a dedicated, fixed-width report instead of capturing a responsive DOM.
+    function drawReportImage(canvas, data, paint = true) {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas unavailable');
+      const width = 960, left = 64, content = width - left * 2;
+      let y = 64;
+      const font = (size, weight = 400) => { ctx.font = `${weight} ${size}px Pretendard, system-ui, sans-serif`; };
+      const paragraph = (value, size = 21, color = '#4e5968', weight = 400, indent = 0) => {
+        font(size, weight); ctx.fillStyle = color; ctx.textBaseline = 'top';
+        const max = content - indent, step = Math.ceil(size * 1.6);
+        for (const raw of String(value || '').split('\n')) {
+          let line = '';
+          for (const character of Array.from(raw)) {
+            const next = line + character;
+            if (line && ctx.measureText(next).width > max) { if (paint) ctx.fillText(line.trimEnd(), left + indent, y); y += step; line = character.trimStart(); }
+            else line = next;
+          }
+          if (paint && line) ctx.fillText(line, left + indent, y);
+          y += step;
+        }
+      };
+      const section = title => {
+        y += 24; if (paint) { ctx.fillStyle = '#e9edf2'; ctx.fillRect(left, y, content, 1); } y += 24;
+        paragraph(title, 23, '#3182f6', 700); y += 10;
+      };
+      const row = (label, value, detail = '') => {
+        paragraph(`${label}  ·  ${value || '확인 불가'}${detail ? `  (${detail})` : ''}`, 21, '#191f28', 600); y += 5;
+      };
+      if (paint) { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, width, canvas.height); }
+      paragraph('CLOSING NOTE', 16, '#3182f6', 700); y += 8;
+      paragraph(`${data.marketName || '시장'}  ·  ${data.date || ''}`, 20, '#6b7684', 600); y += 8;
+      paragraph(data.title || '하루의 시장 기록', 36, '#191f28', 700); y += 18;
+      paragraph(data.summary || '요약 자료가 없습니다.', 23, '#333d4b', 500);
+      const reviews = data.reviewSections || [];
+      if (reviews.length) {
+        section('하루의 시장 이야기');
+        for (const item of reviews) { paragraph(item.heading, 21, '#191f28', 700); y += 3; paragraph(item.text, 20); y += 12; }
+      } else if (data.analysis) { section('시황 해석'); paragraph(data.analysis, 20); }
+      section('주요 시장 지수');
+      for (const item of data.indices || []) row(item.name, item.value, item.change);
+      const macro = data.macro || {};
+      section('환율 · 원자재 · 금리');
+      for (const item of [macro.exchangeRate, macro.dollarIndex, ...(macro.commodities || []), ...(data.crossAssets || [])].filter(Boolean)) row(item.name || '환율', item.value, item.change);
+      if (data.sectorPerformance?.length) { section('업종 흐름'); for (const item of data.sectorPerformance) row(item.name, item.value, item.change); }
+      else if (data.sectors?.length) { section('주요 섹터 · 테마'); paragraph(data.sectors.join('  ·  '), 20); }
+      if (data.stocks?.length) {
+        section('뉴스 속 특징주');
+        for (const item of data.stocks) { row(`${item.name} (${item.ticker})`, item.change); if (item.reason) { paragraph(item.reason, 19, '#6b7684', 400, 12); y += 8; } }
+      }
+      if (data.news?.length) {
+        section('주요 뉴스');
+        for (const item of data.news) { paragraph(item.title, 20, '#333d4b', 600); paragraph(item.source || '', 17, '#8b95a1'); y += 8; }
+      }
+      if (data.watchpoints?.length) { section('다음에 확인할 점'); for (const point of data.watchpoints) { paragraph('• ' + point, 20); y += 5; } }
+      if (data.warnings?.length) { section('자료 확인'); for (const warning of data.warnings) { paragraph('• ' + warning, 17, '#6b7684'); y += 4; } }
+      section('자료 출처');
+      if (data.sources?.length) for (const source of data.sources) { paragraph(source.title || '출처', 17, '#4e5968', 600); if (source.url) paragraph(source.url, 15, '#8b95a1'); y += 5; }
+      else paragraph('출처 정보 없음', 17, '#8b95a1');
+      y += 24; paragraph(`${data.aiMessage || '공개 데이터 기반'}  ·  클로징 노트`, 16, '#8b95a1');
+      return y + 64;
+    }
 
-      html2canvas(el, {
-        scale: 2, 
-        backgroundColor: '#ffffff',
-        useCORS: true,
-        width: targetWidth,
-        windowWidth: targetWidth,
-      }).then(canvas => {
-        el.classList.remove('capture-mode');
-        const link = document.createElement('a');
-        link.download = `Market_Report.png`;
-        link.href = canvas.toDataURL('image/png');
-        link.click();
+    let imageExporting = false;
+    async function exportReportAsImage() {
+      if (imageExporting) return;
+      const data = state.reportData;
+      if (!data) { showToast('저장할 시황이 없습니다.', false); return; }
+      imageExporting = true;
+      showToast('읽기 편한 이미지로 저장 중입니다...');
+      try {
+        if (document.fonts?.ready) await Promise.race([document.fonts.ready, new Promise(resolve => setTimeout(resolve, 3000))]);
+        const canvas = document.createElement('canvas');
+        const height = Math.ceil(drawReportImage(canvas, data, false));
+        const scale = height * 2 <= 16000 ? 2 : 1;
+        if (height > 16000) throw new Error('Report is too long to export');
+        canvas.width = 960 * scale; canvas.height = height * scale;
+        canvas.getContext('2d').scale(scale, scale);
+        drawReportImage(canvas, data);
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        if (!blob) throw new Error('Image encoding failed');
+        const url = URL.createObjectURL(blob), link = document.createElement('a');
+        link.download = `클로징노트_${data.market || '시장'}_${data.date || 'report'}.png`;
+        link.href = url; document.body.appendChild(link); link.click(); link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
         showToast('이미지 저장 완료!');
-      }).catch(err => {
-        el.classList.remove('capture-mode');
-        console.error(err);
-        showToast('이미지 저장 중 오류가 발생했습니다.', false);
-      });
+      } catch (err) {
+        console.error('Report image export failed', err);
+        showToast('이미지를 저장하지 못했습니다. 다시 시도해 주세요.', false);
+      } finally { imageExporting = false; }
     }
 
     function getReportAsMarkdown() {

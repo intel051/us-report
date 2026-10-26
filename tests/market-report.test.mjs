@@ -308,7 +308,7 @@ await scenario('SEC-blocked hosts use dated snapshots without leaking future fil
   assert.equal(before.earnings,null);
   assert(businessExcerpt('<p>ITEM 1. <span>B</span><span>USINESS</span></p>'+('Our business sells devices. '.repeat(70))+'<p>ITEM 1A. <span>RIS</span><span>K</span> FACTORS</p>').startsWith('Our business'));
 });
-await scenario('image export lays out long text and source links inside the fixed width', async () => {
+await scenario('image export wraps long text and excludes source and warning sections', async () => {
   const drawn=[];
   const context={fillStyle:'',font:'',textBaseline:'',measureText: value=>({width:Array.from(value).length*14}),fillRect(){},fillText(value,x,y){drawn.push({value,x,y});}};
   const canvas={height:5000,getContext:()=>context};
@@ -317,7 +317,7 @@ await scenario('image export lays out long text and source links inside the fixe
   ctx.canvas=canvas;ctx.sample={marketName:'미국 증시',date:'2026-10-23',title:'시장 회고',summary:'긴 한글 문장 '.repeat(30),indices:[{name:'S&P 500',value:'7,623.68',change:'-0.52%'}],macro:{commodities:[]},stocks:[],news:[],sources:[{title:'출처',url:'https://example.com/'+'long'.repeat(30)}]};
   const measured=vm.runInContext('drawReportImage(canvas,sample,false)',ctx);
   assert.equal(drawn.length,0); const height=vm.runInContext('drawReportImage(canvas,sample,true)',ctx);
-  assert.equal(height,measured); assert(drawn.some(line=>line.value.includes('S&P 500'))); assert(drawn.some(line=>line.value.includes('example.com')));
+  assert.equal(height,measured); assert(drawn.some(line=>line.value.includes('S&P 500'))); assert(!drawn.some(line=>line.value.includes('example.com') || line.value.includes('자료 출처') || line.value.includes('자료 확인')));
   assert(drawn.every(line=>line.x>=64 && line.x+context.measureText(line.value).width<=896));
   assert(drawn.every((line,i)=>i===0 || line.y>=drawn[i-1].y));
 });

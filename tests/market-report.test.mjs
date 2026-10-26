@@ -321,3 +321,13 @@ await scenario('image export wraps long text and excludes source and warning sec
   assert(drawn.every(line=>line.x>=64 && line.x+context.measureText(line.value).width<=896));
   assert(drawn.every((line,i)=>i===0 || line.y>=drawn[i-1].y));
 });
+await scenario('Korean and Japanese index fallbacks preserve date, previous close and source', async ({lib}) => {
+  const jp = '<table><tr><th>2026/10/16</th><td><span>100</span></td><td>112</td><td>99</td><td>110</td></tr><tr><th>2026/10/15</th><td>100</td><td>105</td><td>98</td><td>100</td></tr></table>';
+  const kr = `[['날짜','시가','고가','저가','종가'],["20261015",100,105,98,100,10,0],["20261016",100,112,99,110,20,0]]`;
+  feedResponder = url => url.includes('siseJson') ? new Response(kr) : url.includes('finance.yahoo.co.jp') ? new Response(jp) : new Response('unavailable',{status:503});
+  for (const [name,symbol,source,zone] of [['코스피','^KS11','네이버 금융','Asia/Seoul'],['코스닥','^KQ11','네이버 금융','Asia/Seoul'],['닛케이225','^N225','Yahoo Japan','Asia/Tokyo'],['TOPIX','^TOPX','Yahoo Japan','Asia/Tokyo']]) {
+    const value=await lib.dailyQuote(name,symbol,'2026-10-16',zone);
+    assert.equal(value.value,'110'); assert.equal(value.change,'+10.00%'); assert.equal(value.previousDate,'2026-10-15'); assert(value.basis.includes(source));
+    assert.equal(await lib.dailyQuote(name,symbol,'2026-10-17',zone),null);
+  }
+});
